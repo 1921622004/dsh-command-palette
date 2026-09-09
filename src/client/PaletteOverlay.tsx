@@ -120,8 +120,11 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
     void Promise.resolve()
       .then(action)
       .then(() => {
-        const latest = loadPrefs()
-        updatePrefs({ ...latest, recent: pushRecent(latest, entry.id) })
+        // Merge onto React state, not a fresh storage read: a swallowed
+        // save failure (quota/private mode) must not roll other
+        // preferences back.
+        const current = stateRef.current.prefs
+        updatePrefs({ ...current, recent: pushRecent(current, entry.id) })
         if (!keepOpen) close()
       })
       .catch(showError)
@@ -178,6 +181,8 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
     const onKey = (event: globalThis.KeyboardEvent): void => {
       const state = stateRef.current
       if (state.recording !== null) {
+        // IME composition keys are not shortcut candidates.
+        if (event.isComposing || event.key === 'Process') return
         event.preventDefault()
         if (event.key === 'Escape') {
           setRecording(null)
@@ -185,10 +190,10 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
           return
         }
         if (event.key === 'Delete' || event.key === 'Backspace') {
-          const latest = loadPrefs()
+          const current = stateRef.current.prefs
           updatePrefs(state.recording.entryId === undefined
-            ? { ...latest, hotkey: null }
-            : setEntryHotkey(latest, state.recording.entryId, null))
+            ? { ...current, hotkey: null }
+            : setEntryHotkey(current, state.recording.entryId, null))
           setRecording(null)
           setError(null)
           return
@@ -199,15 +204,15 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
           setError(t('status.shortcutModifier'))
           return
         }
-        const latest = loadPrefs()
-        const conflict = conflictOwner(captured, state.recording.entryId, latest)
+        const current = stateRef.current.prefs
+        const conflict = conflictOwner(captured, state.recording.entryId, current)
         if (conflict !== undefined) {
           setError(t('status.shortcutConflict', { entry: conflict }))
           return
         }
         updatePrefs(state.recording.entryId === undefined
-          ? { ...latest, hotkey: captured }
-          : setEntryHotkey(latest, state.recording.entryId, captured))
+          ? { ...current, hotkey: captured }
+          : setEntryHotkey(current, state.recording.entryId, captured))
         setRecording(null)
         setError(null)
         return
@@ -221,6 +226,10 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
         return
       }
 
+      // Every binding requires a modifier (or is a function key), so plain
+      // typing never pays for the entry scan below.
+      const functionKey = /^F(?:[1-9]|1[0-2])$/u.test(event.key)
+      if (!(event.metaKey || event.ctrlKey || event.altKey || functionKey)) return
       const direct = allEntries().find(entry => {
         const binding = effectiveEntryHotkey(state.prefs, entry)
         return binding !== null && matchesHotkey(event, binding)
@@ -319,6 +328,9 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
     if (event.nativeEvent.isComposing || recording !== null) return
+    // Modifier chords belong to the direct-shortcut layer (window listener);
+    // plain keys drive palette navigation.
+    if (event.metaKey || event.ctrlKey || event.altKey) return
     if (event.key === 'ArrowDown') {
       event.preventDefault()
       setActive(current => (rows.length === 0 ? 0 : (current + 1) % rows.length))
