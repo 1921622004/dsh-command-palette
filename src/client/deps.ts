@@ -17,6 +17,8 @@ export interface SessionRow {
   readonly cwd?: string
   /** Host-list update stamp (descending recency order). */
   readonly updatedAt?: number
+  /** Coarse durable origin; 'subagent' rows are addressed via their parent's catalog. */
+  readonly origin?: 'subagent'
 }
 
 /** One workspace row (`WorkspaceView` projection slice). */

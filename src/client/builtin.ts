@@ -79,14 +79,18 @@ const RECENT_SESSION_LIMIT = 5
 export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): () => void {
   const { sessions, workspaces, theme, t } = deps
   // Recent conversations pinned above the empty-query list: newest first,
-  // the current session and reusable blanks excluded.
+  // the current session, reusable blanks, and subagent sessions excluded
+  // (subagents are addressed through their parent's catalog, not top-level
+  // navigation).
   runtime.setRecentSessions(() => {
     const snap = sessions.list.getSnapshot()
     return snap.ids
       .filter(id => id !== snap.current)
       .map(id => ({ id, row: snap.byId[id] }))
       .filter((entry): entry is { id: string, row: NonNullable<typeof entry.row> } =>
-        entry.row !== undefined && entry.row.blank !== true)
+        entry.row !== undefined
+        && entry.row.blank !== true
+        && entry.row.origin !== 'subagent')
       .sort((a, b) => (b.row.updatedAt ?? 0) - (a.row.updatedAt ?? 0))
       .slice(0, RECENT_SESSION_LIMIT)
       .map(({ id, row }) => ({
@@ -129,7 +133,7 @@ export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): ()
       choices: () => {
         const snap = sessions.list.getSnapshot()
         return snap.ids
-          .filter(id => id !== snap.current)
+          .filter(id => id !== snap.current && snap.byId[id]?.origin !== 'subagent')
           .map(id => ({
             id,
             label: snap.byId[id]?.displayTitle ?? id,
