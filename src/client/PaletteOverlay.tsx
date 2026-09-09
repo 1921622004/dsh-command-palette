@@ -1,8 +1,8 @@
 /**
- * The palette overlay: the shell.overlay entry that renders the ⌘K popup.
- * Component-internal state only (open/query/highlight/sub-level/recording);
- * the entry list, sub-level choices, and actions all cross in through the
- * injected runtime face, and copy rides the standard `t` seat.
+ * The palette overlay: the shell.overlay entry that renders the keyboard
+ * command popup. Component state owns open/query/highlight/sub-level and
+ * shortcut recording; the entry registry and copy arrive through injected
+ * faces. One row sequence drives both rendering and keyboard navigation.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { JSX, KeyboardEvent } from 'react'
@@ -10,8 +10,12 @@ import type { PaletteChoice, PaletteEntry, PalettePrefs } from './contract.ts'
 import type { PaletteKey } from './locales.ts'
 import type { PaletteRuntime } from './service.ts'
 import { rankItems } from './fuzzy.ts'
-import { eventToHotkey, formatHotkey, matchesHotkey } from './hotkey.ts'
-import { effectiveHotkey, loadPrefs, pushRecent, savePrefs } from './prefs.ts'
+import {
+  eventToHotkey, formatHotkey, isGlobalHotkey, matchesHotkey, sameHotkey, type Hotkey,
+} from './hotkey.ts'
+import {
+  effectiveEntryHotkey, effectiveHotkey, loadPrefs, pushRecent, savePrefs, setEntryHotkey,
+} from './prefs.ts'
 
 /** Group order for rendering. */
 const GROUP_ORDER: readonly PaletteEntry['group'][] = ['session', 'settings', 'action', 'extension']
@@ -35,9 +39,20 @@ interface Row {
   readonly choice?: PaletteChoice
 }
 
+/** Shortcut currently being recorded; absent entry id means palette-open. */
+interface RecordingTarget {
+  readonly entryId?: string
+  readonly label: string
+}
+
 /** Resolve one entry's display label through the locale seat. */
 function labelOf(t: PaletteOverlayProps['t'], key: PaletteKey | undefined, literal: string | undefined): string {
   return key !== undefined ? t(key) : literal ?? ''
+}
+
+/** Resolve one thrown value into the human-visible error line. */
+function errorText(reason: unknown): string {
+  return reason instanceof Error ? reason.message : String(reason)
 }
 
 /**
@@ -49,24 +64,29 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
   const [sub, setSub] = useState<{ readonly entry: PaletteEntry; readonly choices: readonly PaletteChoice[] } | null>(null)
-  const [recording, setRecording] = useState(false)
+  const [recording, setRecording] = useState<RecordingTarget | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [prefs, setPrefs] = useState<PalettePrefs>(() => loadPrefs())
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
   const hotkey = effectiveHotkey(prefs)
-  // The listener reads current state through refs so one window listener
-  // covers open/close, sub-level navigation, and recording capture.
-  const stateRef = useRef({ open, recording, hotkey })
-  stateRef.current = { open, recording, hotkey }
+  // The global listener reads current state through one ref, so it need not
+  // rebind for every key capture or preference update.
+  const stateRef = useRef({ open, recording, hotkey, prefs })
+  stateRef.current = { open, recording, hotkey, prefs }
+
+  const updatePrefs = useCallback((next: PalettePrefs) => {
+    setPrefs(next)
+    savePrefs(next)
+  }, [])
 
   const close = useCallback(() => {
     setOpen(false)
     setSub(null)
     setQuery('')
     setError(null)
-    setRecording(false)
+    setRecording(null)
   }, [])
 
   const openPalette = useCallback(() => {
@@ -75,55 +95,170 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
     setQuery('')
     setActive(0)
     setError(null)
-    setRecording(false)
+    setRecording(null)
   }, [])
 
-  const updatePrefs = useCallback((next: PalettePrefs) => {
-    setPrefs(next)
-    savePrefs(next)
-  }, [])
+  /** Live registry snapshot, deduplicated by id (registered entries win). */
+  const allEntries = useCallback((): readonly PaletteEntry[] => {
+    const entries = new Map<string, PaletteEntry>()
+    for (const entry of [...palette.dynamicEntries(), ...palette.entries()]) entries.set(entry.id, entry)
+    return [...entries.values()]
+  }, [palette])
+
+  const showError = useCallback((reason: unknown) => {
+    setOpen(true)
+    setError(t('status.error', { message: errorText(reason) }))
+  }, [t])
+
+  /** Settle one action and record usage; keepOpen supports shortcut capture. */
+  const execute = useCallback((
+    entry: PaletteEntry,
+    action: () => void | Promise<void>,
+    keepOpen: boolean,
+  ): void => {
+    setError(null)
+    void Promise.resolve()
+      .then(action)
+      .then(() => {
+        const latest = loadPrefs()
+        updatePrefs({ ...latest, recent: pushRecent(latest, entry.id) })
+        if (!keepOpen) close()
+      })
+      .catch(showError)
+  }, [close, showError, updatePrefs])
+
+  /** Execute an entry directly or open its second-level choice list. */
+  const invokeEntry = useCallback((entry: PaletteEntry): void => {
+    setError(null)
+    if (entry.choices !== undefined) {
+      let choices: readonly PaletteChoice[] | null
+      try {
+        choices = entry.choices()
+      } catch (reason) {
+        showError(reason)
+        return
+      }
+      if (choices !== null && choices.length > 0) {
+        setOpen(true)
+        setSub({ entry, choices })
+        setQuery('')
+        setActive(0)
+        setRecording(null)
+        return
+      }
+    }
+    if (entry.execute !== undefined) execute(entry, entry.execute, entry.keepOpen === true)
+  }, [execute, showError])
+
+  /** Execute one second-level choice. */
+  const invokeChoice = useCallback((entry: PaletteEntry, choice: PaletteChoice): void => {
+    execute(entry, choice.execute, choice.keepOpen === true)
+  }, [execute])
+
+  /** Find the command/palette whose effective shortcut conflicts with a candidate. */
+  const conflictOwner = useCallback((
+    candidate: Hotkey,
+    targetEntryId: string | undefined,
+    currentPrefs: PalettePrefs,
+  ): string | undefined => {
+    if (targetEntryId !== undefined && sameHotkey(candidate, effectiveHotkey(currentPrefs))) {
+      return t('overlay.aria')
+    }
+    for (const entry of allEntries()) {
+      if (entry.id === targetEntryId) continue
+      const binding = effectiveEntryHotkey(currentPrefs, entry)
+      if (binding !== null && sameHotkey(candidate, binding)) {
+        return labelOf(t, entry.labelKey, entry.label)
+      }
+    }
+    return undefined
+  }, [allEntries, t])
 
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent): void => {
       const state = stateRef.current
-      if (state.recording) {
+      if (state.recording !== null) {
         event.preventDefault()
         if (event.key === 'Escape') {
-          setRecording(false)
+          setRecording(null)
+          setError(null)
+          return
+        }
+        if (event.key === 'Delete' || event.key === 'Backspace') {
+          const latest = loadPrefs()
+          updatePrefs(state.recording.entryId === undefined
+            ? { ...latest, hotkey: null }
+            : setEntryHotkey(latest, state.recording.entryId, null))
+          setRecording(null)
+          setError(null)
           return
         }
         const captured = eventToHotkey(event)
-        if (captured !== null) updatePrefs({ ...(loadPrefs()), hotkey: captured })
-        setRecording(false)
+        if (captured === null) return
+        if (!isGlobalHotkey(captured)) {
+          setError(t('status.shortcutModifier'))
+          return
+        }
+        const latest = loadPrefs()
+        const conflict = conflictOwner(captured, state.recording.entryId, latest)
+        if (conflict !== undefined) {
+          setError(t('status.shortcutConflict', { entry: conflict }))
+          return
+        }
+        updatePrefs(state.recording.entryId === undefined
+          ? { ...latest, hotkey: captured }
+          : setEntryHotkey(latest, state.recording.entryId, captured))
+        setRecording(null)
+        setError(null)
         return
       }
+
+      if (event.repeat) return
       if (matchesHotkey(event, state.hotkey)) {
         event.preventDefault()
         if (state.open) close()
         else openPalette()
+        return
+      }
+
+      const direct = allEntries().find(entry => {
+        const binding = effectiveEntryHotkey(state.prefs, entry)
+        return binding !== null && matchesHotkey(event, binding)
+      })
+      if (direct !== undefined) {
+        event.preventDefault()
+        invokeEntry(direct)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [close, openPalette, updatePrefs])
+  }, [allEntries, close, conflictOwner, invokeEntry, openPalette, t, updatePrefs])
 
-  // The hotkey entry asks the runtime to start recording; the view owns capture.
+  // Shortcut-settings entries ask the runtime to capture either palette-open
+  // (undefined) or one direct command binding.
   useEffect(() => {
-    palette.onRecordingRequest(() => {
-      setRecording(true)
+    palette.onRecordingRequest(entryId => {
+      const entry = entryId === undefined ? undefined : allEntries().find(candidate => candidate.id === entryId)
+      setOpen(true)
+      setSub(null)
+      setQuery('')
+      setActive(0)
       setError(null)
+      setRecording({
+        ...(entryId === undefined ? {} : { entryId }),
+        label: entry === undefined ? t('overlay.aria') : labelOf(t, entry.labelKey, entry.label),
+      })
     })
     return () => palette.onRecordingRequest(null)
-  }, [palette])
+  }, [allEntries, palette, t])
 
   useEffect(() => {
     if (open) requestAnimationFrame(() => inputRef.current?.focus())
   }, [open, sub])
 
   const visibleEntries = useMemo(
-    () => [...palette.entries(), ...palette.dynamicEntries()]
-      .filter(entry => !prefs.hidden.includes(entry.id)),
-    [palette, prefs.hidden, open, sub],
+    () => allEntries().filter(entry => !prefs.hidden.includes(entry.id)),
+    [allEntries, prefs.hidden, open, sub],
   )
 
   const rows: readonly Row[] = useMemo(() => {
@@ -134,20 +269,22 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
         row: { entry: sub.entry, choice },
       })), query).map(scored => scored.row)
     }
-    const project = (entry: PaletteEntry): { label: string, detail: string | undefined, keywords: readonly string[] | undefined, id: string, row: Row } => ({
+    const project = (entry: PaletteEntry): {
+      label: string
+      detail: string | undefined
+      keywords: readonly string[] | undefined
+      id: string
+      row: Row
+    } => ({
       label: labelOf(t, entry.labelKey, entry.label),
       detail: labelOf(t, entry.detailKey, entry.detail) || undefined,
       keywords: entry.keywords,
       id: entry.id,
-      row: { entry } as Row,
+      row: { entry },
     })
     if (query === '') {
-      // Single source of row order, matching the grouped rendering exactly:
-      // GROUP_ORDER groups; within the session group the recent
-      // conversations lead; inside every group pinned entries come first,
-      // then recently-used commands, then registration order. The
-      // keyboard-nav array and the rendered rows are then the same
-      // sequence — index i addresses the same row in both.
+      // Single row order source: rendering and keyboard navigation consume
+      // this exact sequence.
       const conversations = palette.recentSessions()
         .filter(entry => !prefs.hidden.includes(entry.id))
       const conversationIds = new Set(conversations.map(entry => entry.id))
@@ -156,10 +293,9 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
         if (prefs.recent.includes(entry.id)) return 1
         return 2
       }
-      const others = GROUP_ORDER
-        .flatMap(group => [...visibleEntries
-          .filter(entry => entry.group === group && !conversationIds.has(entry.id))]
-          .sort((a, b) => rankOf(a) - rankOf(b)))
+      const others = GROUP_ORDER.flatMap(group => [...visibleEntries
+        .filter(entry => entry.group === group && !conversationIds.has(entry.id))]
+        .sort((a, b) => rankOf(a) - rankOf(b)))
       return [...conversations, ...others].map(entry => project(entry).row)
     }
     return rankItems(visibleEntries.map(project), query).map(scored => scored.row)
@@ -177,38 +313,12 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
   if (!open) return null
 
   const run = (row: Row): void => {
-    setError(null)
-    if (row.choice !== undefined) {
-      void Promise.resolve(row.choice.execute())
-        .then(() => {
-          updatePrefs({ ...(loadPrefs()), recent: pushRecent(loadPrefs(), row.entry.id) })
-          close()
-        })
-        .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason)))
-      return
-    }
-    const { entry } = row
-    if (entry.choices !== undefined) {
-      const choices = entry.choices()
-      if (choices !== null && choices.length > 0) {
-        setSub({ entry, choices })
-        setQuery('')
-        setActive(0)
-        return
-      }
-    }
-    if (entry.execute !== undefined) {
-      void Promise.resolve(entry.execute())
-        .then(() => {
-          updatePrefs({ ...(loadPrefs()), recent: pushRecent(loadPrefs(), entry.id) })
-          close()
-        })
-        .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason)))
-    }
+    if (row.choice !== undefined) invokeChoice(row.entry, row.choice)
+    else invokeEntry(row.entry)
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
-    if (event.nativeEvent.isComposing) return
+    if (event.nativeEvent.isComposing || recording !== null) return
     if (event.key === 'ArrowDown') {
       event.preventDefault()
       setActive(current => (rows.length === 0 ? 0 : (current + 1) % rows.length))
@@ -227,8 +337,7 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
       }
     } else if (event.key === 'Escape') {
       event.preventDefault()
-      if (recording) setRecording(false)
-      else if (sub !== null) {
+      if (sub !== null) {
         setSub(null)
         setQuery('')
       } else close()
@@ -274,8 +383,6 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
               </div>
             ))
             : (() => {
-              // Global row index across groups: the highlight addresses the
-              // flat row list, never a group-local position.
               let index = 0
               return GROUP_ORDER.flatMap(group => {
                 const list = grouped.get(group)
@@ -284,6 +391,7 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
                   <div key={`group-${group}`} className="dsh-palette-group">{t(GROUP_KEY[group])}</div>,
                   ...list.map(row => {
                     const i = index++
+                    const binding = effectiveEntryHotkey(prefs, row.entry)
                     return (
                       <div
                         key={row.entry.id}
@@ -298,6 +406,9 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
                         {labelOf(t, row.entry.detailKey, row.entry.detail) !== '' && (
                           <span className="dsh-palette-row-detail">{labelOf(t, row.entry.detailKey, row.entry.detail)}</span>
                         )}
+                        {binding !== null && (
+                          <span className="dsh-palette-row-shortcut">{formatHotkey(binding)}</span>
+                        )}
                         {row.entry.choices !== undefined && (
                           <span className="dsh-palette-row-hint">{t('row.hint.sub')}</span>
                         )}
@@ -308,9 +419,15 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
               })
             })()}
         </div>
-        {recording && <div className="dsh-palette-note" data-kind="recording">{t('status.recording')}</div>}
+        {recording !== null && (
+          <div className="dsh-palette-note" data-kind="recording">
+            {recording.entryId === undefined
+              ? t('status.recording')
+              : t('status.recordingEntry', { entry: recording.label })}
+          </div>
+        )}
         {error !== null && (
-          <div className="dsh-palette-note" data-kind="error">{t('status.error', { message: error })}</div>
+          <div className="dsh-palette-note" data-kind="error">{error}</div>
         )}
         <div className="dsh-palette-footer">
           <span>↑↓ · Enter · Tab · Esc</span>

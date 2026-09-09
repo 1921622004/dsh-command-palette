@@ -9,6 +9,8 @@ import type { PaletteRuntime } from './service.ts'
 import type {
   PaletteTranslate, SessionsFace, ThemeFace, ThemePreference, WorkspacesFace,
 } from './deps.ts'
+import { formatHotkey, modHotkey } from './hotkey.ts'
+import { effectiveEntryHotkey, loadPrefs } from './prefs.ts'
 import { openSettingsSection } from './settings-opener.ts'
 
 /** Services the built-in entries close over. */
@@ -50,6 +52,11 @@ async function startSession(sessions: SessionsFace, workspaces: WorkspacesFace):
   })
   const id = blank ?? await sessions.create({ workspaceId: target.workspaceId })
   sessions.open(id)
+}
+
+/** Resolve one entry's display label for the shortcut settings list. */
+function entryLabel(entry: PaletteEntry, t: PaletteTranslate): string {
+  return entry.labelKey !== undefined ? t(entry.labelKey) : entry.label ?? entry.id
 }
 
 /** Preference ids in the palette's display order. */
@@ -95,18 +102,21 @@ export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): ()
       id: 'palette.session.new',
       group: 'session',
       labelKey: 'entry.session.new',
+      defaultHotkey: modHotkey('n', { alt: true }),
       execute: () => startSession(sessions, workspaces),
     }),
     runtime.register({
       id: 'palette.session.prev',
       group: 'session',
       labelKey: 'entry.session.prev',
+      defaultHotkey: modHotkey('ArrowUp', { alt: true }),
       execute: () => stepSession(sessions, -1),
     }),
     runtime.register({
       id: 'palette.session.next',
       group: 'session',
       labelKey: 'entry.session.next',
+      defaultHotkey: modHotkey('ArrowDown', { alt: true }),
       execute: () => stepSession(sessions, 1),
     }),
     runtime.register({
@@ -115,6 +125,7 @@ export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): ()
       labelKey: 'entry.session.switch',
       detailKey: 'entry.session.switch.detail',
       keywords: ['switch', 'goto'],
+      defaultHotkey: modHotkey('g', { alt: true }),
       choices: () => {
         const snap = sessions.list.getSnapshot()
         return snap.ids
@@ -132,6 +143,7 @@ export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): ()
       labelKey: 'entry.session.openFolder',
       detailKey: 'entry.session.openFolder.detail',
       keywords: ['folder', 'finder', 'explorer', 'directory'],
+      defaultHotkey: modHotkey('o', { alt: true }),
       execute: () => {
         const snap = sessions.list.getSnapshot()
         const current = snap.current
@@ -146,6 +158,7 @@ export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): ()
       group: 'action',
       labelKey: 'entry.session.archive',
       keywords: ['archive'],
+      defaultHotkey: modHotkey('a', { alt: true }),
       execute: () => {
         const snap = sessions.list.getSnapshot()
         if (snap.current !== undefined) void workspaces.archiveSession(snap.current)
@@ -156,6 +169,7 @@ export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): ()
       group: 'action',
       labelKey: 'entry.session.interrupt',
       keywords: ['interrupt', 'stop', 'cancel'],
+      defaultHotkey: modHotkey('x', { alt: true }),
       execute: () => {
         const snap = sessions.list.getSnapshot()
         if (snap.current !== undefined) void sessions.binding(snap.current)?.session.cancel()
@@ -166,6 +180,7 @@ export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): ()
       group: 'settings',
       labelKey: 'entry.settings.open',
       keywords: ['settings', 'preferences'],
+      defaultHotkey: modHotkey(',', { alt: true }),
       choices: () => ([
         { id: 'general', label: t('entry.settings.open.general'), execute: () => openSettingsSection(0) },
         { id: 'models', label: t('entry.settings.open.models'), execute: () => openSettingsSection(1) },
@@ -177,6 +192,7 @@ export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): ()
       id: 'palette.settings.theme',
       group: 'settings',
       labelKey: 'entry.settings.theme',
+      defaultHotkey: modHotkey('t', { alt: true }),
       choices: () => THEME_ORDER.map(pref => ({
         id: pref,
         label: t(THEME_KEY[pref]),
@@ -189,7 +205,35 @@ export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): ()
       labelKey: 'entry.settings.hotkey',
       detailKey: 'entry.settings.hotkey.detail',
       keywords: ['hotkey', 'shortcut', 'keybinding'],
+      defaultHotkey: modHotkey('k', { alt: true }),
+      keepOpen: true,
       execute: () => runtime.beginHotkeyRecording(),
+    }),
+    runtime.register({
+      id: 'palette.settings.bindings',
+      group: 'settings',
+      labelKey: 'entry.settings.bindings',
+      detailKey: 'entry.settings.bindings.detail',
+      keywords: ['hotkey', 'shortcut', 'keybinding'],
+      defaultHotkey: modHotkey('k', { alt: true, shift: true }),
+      choices: () => {
+        const prefs = loadPrefs()
+        const entries = new Map(
+          [...runtime.entries(), ...runtime.dynamicEntries()]
+            .map(entry => [entry.id, entry] as const),
+        )
+        return [...entries.values()]
+          .map(entry => {
+            const binding = effectiveEntryHotkey(prefs, entry)
+            return {
+              id: entry.id,
+              label: entryLabel(entry, t),
+              detail: binding === null ? t('shortcut.none') : formatHotkey(binding),
+              keepOpen: true,
+              execute: () => runtime.beginHotkeyRecording(entry.id),
+            }
+          })
+      },
     }),
   ]
   return () => {

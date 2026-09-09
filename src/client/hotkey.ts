@@ -14,8 +14,22 @@ export interface Hotkey {
   readonly key: string
 }
 
+/** Build one platform-primary shortcut (Mod = macOS ⌘, Windows/Linux Ctrl). */
+export function modHotkey(
+  key: string,
+  options: { readonly alt?: boolean, readonly shift?: boolean } = {},
+): Hotkey {
+  return {
+    mod: true,
+    ctrl: false,
+    alt: options.alt ?? false,
+    shift: options.shift ?? false,
+    key,
+  }
+}
+
 /** The default palette hotkey: ⌘K on macOS, Ctrl+K elsewhere. */
-export const DEFAULT_HOTKEY: Hotkey = { mod: true, ctrl: false, alt: false, shift: false, key: 'k' }
+export const DEFAULT_HOTKEY: Hotkey = modHotkey('k')
 
 /** True on Apple platforms (navigator-based; jsdom reports MacIntel by default). */
 function isMac(): boolean {
@@ -25,18 +39,44 @@ function isMac(): boolean {
 /** Structural pick of KeyboardEvent the hotkey logic reads. */
 export interface HotkeyEvent {
   readonly key: string
+  /** Physical key identity; used to recover the base key under Alt/Option. */
+  readonly code?: string
   readonly metaKey: boolean
   readonly ctrlKey: boolean
   readonly altKey: boolean
   readonly shiftKey: boolean
 }
 
+/** Base shortcut key recovered from KeyboardEvent.code where possible. */
+function baseKey(event: HotkeyEvent): string {
+  const code = event.code
+  if (code !== undefined) {
+    if (/^Key[A-Z]$/u.test(code)) return code.slice(3).toLowerCase()
+    if (/^Digit[0-9]$/u.test(code)) return code.slice(5)
+    const punctuation: Readonly<Record<string, string>> = {
+      Comma: ',',
+      Period: '.',
+      Slash: '/',
+      Semicolon: ';',
+      Quote: "'",
+      BracketLeft: '[',
+      BracketRight: ']',
+      Backslash: '\\',
+      Minus: '-',
+      Equal: '=',
+      Backquote: '`',
+    }
+    const normalized = punctuation[code]
+    if (normalized !== undefined) return normalized
+  }
+  return event.key.length === 1 ? event.key.toLowerCase() : event.key
+}
+
 /**
  * Normalize a key press into a Hotkey. The press's platform primary
- * modifier (Meta on macOS, Ctrl elsewhere) is canonicalized into `mod`, so
- * a recorded combination matches on the recording platform — a Windows
- * Ctrl+P records as Mod+P, never as a literal-Ctrl combination that
- * {@link matchesHotkey} would refuse.
+ * modifier (Meta on macOS, Ctrl elsewhere) is canonicalized into `mod`.
+ * KeyboardEvent.code recovers the base letter/punctuation under macOS
+ * Option (for example ⌘⌥A reports the physical A rather than “å”).
  * @param event - the press to capture; bare modifier presses return null.
  */
 export function eventToHotkey(event: HotkeyEvent): Hotkey | null {
@@ -48,7 +88,7 @@ export function eventToHotkey(event: HotkeyEvent): Hotkey | null {
     ctrl: mac ? event.ctrlKey : false,
     alt: event.altKey,
     shift: event.shiftKey,
-    key: key.length === 1 ? key.toLowerCase() : key,
+    key: baseKey(event),
   }
 }
 
@@ -71,17 +111,48 @@ export function matchesHotkey(event: HotkeyEvent, hotkey: Hotkey): boolean {
     && ctrlPressed === canonical.ctrl
     && event.altKey === canonical.alt
     && event.shiftKey === canonical.shift
-    && event.key.toLowerCase() === canonical.key
+    && baseKey(event).toLowerCase() === canonical.key.toLowerCase()
+}
+
+/** Whether two combinations resolve to the same platform-normalized chord. */
+export function sameHotkey(left: Hotkey, right: Hotkey): boolean {
+  const a = canonicalize(left)
+  const b = canonicalize(right)
+  return a.mod === b.mod
+    && a.ctrl === b.ctrl
+    && a.alt === b.alt
+    && a.shift === b.shift
+    && a.key.toLowerCase() === b.key.toLowerCase()
+}
+
+/** Whether a chord is safe as a global shortcut (modifier or function key required). */
+export function isGlobalHotkey(hotkey: Hotkey): boolean {
+  const key = hotkey.key.toUpperCase()
+  return hotkey.mod || hotkey.ctrl || hotkey.alt || /^F(?:[1-9]|1[0-2])$/u.test(key)
 }
 
 /** Human-readable form, e.g. "⌘K" / "Ctrl+Shift+P". */
 export function formatHotkey(hotkey: Hotkey): string {
   const canonical = canonicalize(hotkey)
   const mac = isMac()
+  const key = ({
+    arrowup: '↑',
+    arrowdown: '↓',
+    arrowleft: '←',
+    arrowright: '→',
+  } as Readonly<Record<string, string>>)[canonical.key.toLowerCase()] ?? canonical.key.toUpperCase()
+  if (mac) {
+    const parts: string[] = []
+    if (canonical.mod) parts.push('⌘')
+    if (canonical.ctrl) parts.push('Ctrl')
+    if (canonical.alt) parts.push('⌥')
+    if (canonical.shift) parts.push('⇧')
+    return parts.join('') + key
+  }
   const parts: string[] = []
-  if (canonical.mod) parts.push(mac ? '⌘' : 'Ctrl')
-  if (canonical.ctrl) parts.push(mac ? 'Ctrl' : '⌃')
-  if (canonical.alt) parts.push(mac ? '⌥' : 'Alt')
-  if (canonical.shift) parts.push(mac ? '⇧' : 'Shift')
-  return parts.join('') + canonical.key.toUpperCase()
+  if (canonical.mod) parts.push('Ctrl')
+  if (canonical.alt) parts.push('Alt')
+  if (canonical.shift) parts.push('Shift')
+  parts.push(key)
+  return parts.join('+')
 }

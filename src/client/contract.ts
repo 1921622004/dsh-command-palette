@@ -14,6 +14,8 @@ export interface PaletteChoice {
   /** Display label (already localized by the registrant). */
   readonly label: string
   readonly detail?: string
+  /** Keep the palette open after this choice runs (used by shortcut recording). */
+  readonly keepOpen?: boolean
   execute(): void | Promise<void>
 }
 
@@ -31,11 +33,15 @@ export interface PaletteEntry {
   readonly detail?: string
   /** Extra match keywords beyond label/detail. */
   readonly keywords?: readonly string[]
+  /** Default direct-execution shortcut; user preferences may replace or disable it. */
+  readonly defaultHotkey?: Hotkey
   /**
    * Second-level selector: a non-empty list opens the sub-level view; null
    * falls through to `execute`.
    */
   readonly choices?: () => readonly PaletteChoice[] | null
+  /** Keep the palette open after direct execution (used by shortcut recording). */
+  readonly keepOpen?: boolean
   /** The entry's action; required exactly when `choices` is absent. */
   execute?(): void | Promise<void>
 }
@@ -53,6 +59,8 @@ export interface PalettePrefs {
   readonly pinned: readonly string[]
   readonly hidden: readonly string[]
   readonly recent: readonly string[]
-  /** User-customized open hotkey; null keeps the platform default (⌘K / Ctrl+K). */
+  /** User-customized palette-open hotkey; null keeps the platform default (⌘K / Ctrl+K). */
   readonly hotkey: Hotkey | null
+  /** Per-entry overrides: absent = entry default, Hotkey = override, null = disabled. */
+  readonly bindings: Readonly<Record<string, Hotkey | null>>
 }

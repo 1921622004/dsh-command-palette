@@ -1,9 +1,9 @@
 /**
  * Optional DOM-driven integrations (dsh-task-board / dsh-skill-explorer /
  * dsh-pet, whether installed standalone or through a dsh-web-all aggregate —
- * the families share one codebase and one set of stable hooks). Presence is
- * probed when the palette OPENS, so late-mounting or later-installed
- * plugins appear without a plugin restart:
+ * the families share one codebase and one set of stable hooks). Task-board
+ * and skill-explorer are probed from live DOM hooks on every entry read; pet
+ * uses one same-origin API probe because its DOM root unmounts while hidden:
  *
  * - task-board: the `[data-dsh-taskboard-entry]` sidebar button toggles the
  *   board; `data-dsh-taskboard-active` on <html> marks it open.
@@ -14,6 +14,7 @@
  *   as the presence probe (the DOM root unmounts while hidden).
  */
 import type { PaletteEntry } from './contract.ts'
+import { modHotkey } from './hotkey.ts'
 
 /** One sidebar entry button by its row attribute, when present. */
 function sidebarButton(selector: string): HTMLButtonElement | undefined {
@@ -72,6 +73,7 @@ export function optionalIntegrationEntries(pet: PetProbe): readonly PaletteEntry
       labelKey: boardActive() ? 'entry.board.close' : 'entry.board.open',
       detailKey: 'entry.board.detail',
       keywords: ['task', 'board', 'kanban'],
+      defaultHotkey: modHotkey('b', { alt: true }),
       execute: () => board.click(),
     })
   }
@@ -83,6 +85,7 @@ export function optionalIntegrationEntries(pet: PetProbe): readonly PaletteEntry
       labelKey: 'entry.skills.open',
       detailKey: 'entry.skills.detail',
       keywords: ['skill', 'skills', 'center'],
+      defaultHotkey: modHotkey('s', { alt: true }),
       execute: () => skills.click(),
     })
   }
@@ -93,6 +96,7 @@ export function optionalIntegrationEntries(pet: PetProbe): readonly PaletteEntry
       labelKey: 'entry.pet.show',
       detailKey: 'entry.pet.detail',
       keywords: ['pet', 'show'],
+      defaultHotkey: modHotkey('p', { alt: true }),
       execute: () => pet.setVisible(true),
     }, {
       id: 'palette.integration.pet.hide',
@@ -100,6 +104,7 @@ export function optionalIntegrationEntries(pet: PetProbe): readonly PaletteEntry
       labelKey: 'entry.pet.hide',
       detailKey: 'entry.pet.detail',
       keywords: ['pet', 'hide'],
+      defaultHotkey: modHotkey('p', { alt: true, shift: true }),
       execute: () => pet.setVisible(false),
     })
   }

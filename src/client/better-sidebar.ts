@@ -8,6 +8,7 @@
  * (reactive `ctx.inject`), so uninstalling the plugin removes them.
  */
 import type { PaletteRuntime } from './service.ts'
+import { modHotkey } from './hotkey.ts'
 
 /** The `betterSidebar` service face these entries consume. */
 export interface BetterSidebarFace {
@@ -41,6 +42,7 @@ export function registerBetterSidebarEntries(runtime: PaletteRuntime, sidebar: B
       labelKey: 'entry.sidebar.open',
       detailKey: 'entry.sidebar.open.detail',
       keywords: ['sidebar', 'panel'],
+      defaultHotkey: modHotkey('j'),
       execute: () => ensureSidebarPanelOpen(),
     }),
     runtime.register({
@@ -49,6 +51,7 @@ export function registerBetterSidebarEntries(runtime: PaletteRuntime, sidebar: B
       labelKey: 'entry.sidebar.terminal',
       detailKey: 'entry.sidebar.terminal.detail',
       keywords: ['terminal', 'shell', 'pty'],
+      defaultHotkey: modHotkey('j', { shift: true }),
       execute: () => {
         if (sidebar.isTabEnabled('terminal') === false) return
         ensureSidebarPanelOpen()

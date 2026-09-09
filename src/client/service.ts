@@ -6,8 +6,8 @@
  */
 import type { PaletteEntry, PaletteRuntimeFace } from './contract.ts'
 
-/** Callback fired when the user asked (through an entry) to re-record the hotkey. */
-export type RecordingRequest = () => void
+/** Callback fired when the user asks to record the palette or one entry shortcut. */
+export type RecordingRequest = (entryId?: string) => void
 
 /** The runtime's full face: the public registry plus view-internal wiring. */
 export interface PaletteRuntime extends PaletteRuntimeFace {
@@ -23,8 +23,8 @@ export interface PaletteRuntime extends PaletteRuntimeFace {
   setDynamicEntries(fn: (() => readonly PaletteEntry[]) | null): void
   /** Install the view's recording listener (the view owns the actual capture). */
   onRecordingRequest(cb: RecordingRequest | null): void
-  /** Fire the installed recording listener (no-op when the palette is closed). */
-  beginHotkeyRecording(): void
+  /** Fire the installed recording listener for the palette or one entry. */
+  beginHotkeyRecording(entryId?: string): void
 }
 
 /** Live mutable state behind the runtime face. */
@@ -66,8 +66,8 @@ export function createPaletteRuntime(
     onRecordingRequest(cb) {
       live.recordingRequest = cb
     },
-    beginHotkeyRecording() {
-      live.recordingRequest?.()
+    beginHotkeyRecording(entryId) {
+      live.recordingRequest?.(entryId)
     },
   }
   effect(() => provide('commandPalette', runtime))

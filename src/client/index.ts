@@ -59,14 +59,11 @@ export function apply(ctx: ClientContext): void {
   )
   // Optional dsh-better-sidebar integration: entries live exactly while the
   // `betterSidebar` service does (reactive inject, cleaned on its disposal).
-  // Optional DOM-driven integrations (task-board / skill-explorer / pet):
-  // probed at each palette open, so presence follows the plugins live.
+  // Optional integrations: task-board and skill-explorer probe their live DOM
+  // hooks on each read; pet uses one same-origin API presence probe at boot.
   const pet = createPetProbe()
   pet.refresh()
-  runtime.setDynamicEntries(() => {
-    pet.refresh()
-    return optionalIntegrationEntries(pet)
-  })
+  runtime.setDynamicEntries(() => optionalIntegrationEntries(pet))
   ctx.inject(['betterSidebar'], scope => {
     scope.effect(() => {
       const sidebar = scope.get('betterSidebar') as BetterSidebarFace
