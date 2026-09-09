@@ -3,7 +3,6 @@
   "displayName": "DSH Command Palette",
   "description": "Command palette (⌘K) for the DeepSeek Harness Web GUI: keyboard-first quick entries over sessions, settings, and actions, with a customizable hotkey and a register extension point.",
   "version": "0.1.0",
-  "private": true,
   "license": "MIT",
   "type": "module",
   "engines": {
