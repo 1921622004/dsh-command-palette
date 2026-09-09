@@ -65,6 +65,24 @@ export function createPetProbe(): PetProbe {
  */
 export function optionalIntegrationEntries(pet: PetProbe): readonly PaletteEntry[] {
   const entries: PaletteEntry[] = []
+  // better-sidebar right-panel toggle: a true switch — the label follows the
+  // live fold state (body[data-dsh-sidebar-collapsed]), and clicking the
+  // cluster's last button flips it either way.
+  const clusterButtons = document.querySelectorAll('[data-dsh-toggle-cluster] button')
+  const sidebarToggle = clusterButtons[clusterButtons.length - 1]
+  if (sidebarToggle instanceof HTMLButtonElement) {
+    entries.push({
+      id: 'palette.sidebar.open',
+      group: 'extension',
+      labelKey: document.body.hasAttribute('data-dsh-sidebar-collapsed')
+        ? 'entry.sidebar.open'
+        : 'entry.sidebar.close',
+      detailKey: 'entry.sidebar.toggle.detail',
+      keywords: ['sidebar', 'panel'],
+      defaultHotkey: modHotkey('j'),
+      execute: () => sidebarToggle.click(),
+    })
+  }
   const board = sidebarButton('[data-dsh-taskboard-entry]')
   if (board !== undefined) {
     entries.push({

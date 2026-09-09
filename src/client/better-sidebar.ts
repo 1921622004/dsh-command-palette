@@ -29,22 +29,16 @@ function ensureSidebarPanelOpen(): void {
 }
 
 /**
- * Register the better-sidebar entries on the runtime.
+ * Register the better-sidebar entries on the runtime. The panel toggle
+ * lives in optional-integrations (a true switch with a state-following
+ * label); this module keeps the terminal entry, which needs the service's
+ * openTab face.
  * @param runtime - the palette runtime.
  * @param sidebar - the live `betterSidebar` service face.
  * @returns the aggregate disposer.
  */
 export function registerBetterSidebarEntries(runtime: PaletteRuntime, sidebar: BetterSidebarFace): () => void {
   const disposers = [
-    runtime.register({
-      id: 'palette.sidebar.open',
-      group: 'extension',
-      labelKey: 'entry.sidebar.open',
-      detailKey: 'entry.sidebar.open.detail',
-      keywords: ['sidebar', 'panel'],
-      defaultHotkey: modHotkey('j'),
-      execute: () => ensureSidebarPanelOpen(),
-    }),
     runtime.register({
       id: 'palette.sidebar.terminal',
       group: 'extension',
