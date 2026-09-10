@@ -15,6 +15,7 @@
  */
 import type { PaletteEntry } from './contract.ts'
 import { modHotkey } from './hotkey.ts'
+import { sidebarLabelKey, toggleSidebar, type OfficialSidebarFace } from './sidebar-compat.ts'
 
 /** One sidebar entry button by its row attribute, when present. */
 function sidebarButton(selector: string): HTMLButtonElement | undefined {
@@ -61,26 +62,32 @@ export function createPetProbe(): PetProbe {
 /**
  * Compute the optional integration entries for one palette open.
  * @param pet - the pet API probe.
+ * @param officialSidebar - DSH native right-Sidebar face, when composed.
  * @returns entries for every integration whose plugin is present.
  */
-export function optionalIntegrationEntries(pet: PetProbe): readonly PaletteEntry[] {
+export function optionalIntegrationEntries(
+  pet: PetProbe,
+  officialSidebar?: OfficialSidebarFace,
+): readonly PaletteEntry[] {
   const entries: PaletteEntry[] = []
-  // better-sidebar right-panel toggle: a true switch — the label follows the
-  // live fold state (body[data-dsh-sidebar-collapsed]), and clicking the
-  // cluster's last button flips it either way.
+  // Prefer DSH's native right-Sidebar face. Older better-sidebar versions
+  // expose only their toggle button, which remains the fallback.
   const clusterButtons = document.querySelectorAll('[data-dsh-toggle-cluster] button')
   const sidebarToggle = clusterButtons[clusterButtons.length - 1]
-  if (sidebarToggle instanceof HTMLButtonElement) {
+  const legacyClick = sidebarToggle instanceof HTMLButtonElement
+    ? () => { sidebarToggle.click() }
+    : undefined
+  if (officialSidebar !== undefined || legacyClick !== undefined) {
+    const expanded = officialSidebar?.isExpanded()
+      ?? !document.body.hasAttribute('data-dsh-sidebar-collapsed')
     entries.push({
       id: 'palette.sidebar.open',
       group: 'extension',
-      labelKey: document.body.hasAttribute('data-dsh-sidebar-collapsed')
-        ? 'entry.sidebar.open'
-        : 'entry.sidebar.close',
+      labelKey: sidebarLabelKey(expanded),
       detailKey: 'entry.sidebar.toggle.detail',
       keywords: ['sidebar', 'panel'],
       defaultHotkey: modHotkey('j'),
-      execute: () => sidebarToggle.click(),
+      execute: () => { toggleSidebar(officialSidebar, legacyClick) },
     })
   }
   const board = sidebarButton('[data-dsh-taskboard-entry]')

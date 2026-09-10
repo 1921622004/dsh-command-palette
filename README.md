@@ -28,7 +28,7 @@
 | 中断运行 | `⌘⌥X` | `Ctrl+Alt+X` |
 | 打开设置 | `⌘⌥,` | `Ctrl+Alt+,` |
 | 切换主题 | `⌘⌥T` | `Ctrl+Alt+T` |
-| 打开侧边栏 | `⌘J` | `Ctrl+J` |
+| 展开 / 收起右侧边栏 | `⌘J` | `Ctrl+J` |
 | 打开终端 | `⌘⇧J` | `Ctrl+Shift+J` |
 | 打开任务看板 | `⌘⌥B` | `Ctrl+Alt+B` |
 | 打开技能中心 | `⌘⌥S` | `Ctrl+Alt+S` |
@@ -63,14 +63,15 @@
 
 ### 可选插件集成
 
-检测到对应插件时，面板会自动增加相关入口：
+检测到对应功能时，面板会自动增加相关入口：
 
-- **dsh-better-sidebar**：打开侧边栏、打开终端
+- **DSH 官方右侧边栏**：展开或收起侧边栏
+- **dsh-better-sidebar**：打开终端；新版会在 DSH 官方右侧边栏中显示，旧版仍可使用原面板
 - **dsh-pet**：打开宠物、隐藏宠物
 - **dsh-task-board**：打开或关闭任务看板
 - **dsh-skill-explorer**：打开技能中心
 
-这些插件无论单独安装，还是随插件合集安装，都可以被识别。
+这些插件无论单独安装，还是随插件合集安装，都可以被识别。设置直达会按页面名称查找，因此第三方插件新增设置页面后也不会改变“通用设置、模型、插件、Agent 预设”的目标。
 
 ## 安装
 
@@ -106,6 +107,7 @@ dsh plugin --profile web remove dsh-command-palette
 ## 开发
 
 ```bash
+pnpm run test
 pnpm run typecheck
 pnpm run build
 pnpm run dev

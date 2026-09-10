@@ -25,9 +25,9 @@
 
 ### 2. 内置入口
 - 会话：新建（复刻 ui-workspace `startSession`：目标工作区 → 复用空白会话或新建 → open）、上一个/下一个、切换到会话…（二级选择）、打开文件夹（`/open-folder` 宿主命令）、归档当前对话。
-- 设置：打开设置…（通用/模型/插件/代理预设直达，DOM 驱动：标签匹配 + 探测兜底）、切换主题…、修改面板快捷键…。
+- 设置：打开设置…（通用设置/模型/插件/Agent 预设直达，优先匹配官方 aria-label 与导航标题，位置索引仅兼容旧版）、切换主题…、修改面板快捷键…。
 - 动作：中断当前运行。
-- 扩展：`ctx.commandPalette.register` 注册的入口；`dsh-better-sidebar` 在场时（响应式 `ctx.inject(['betterSidebar'])`）追加「打开侧边栏」「打开终端」。
+- 扩展：`ctx.commandPalette.register` 注册的入口；官方 `sidebarRight` 服务提供侧边栏开关，`dsh-better-sidebar` 在场时追加「打开终端」并由其适配官方侧边栏；旧版组合回退到原 DOM 控件。
 
 ### 3. 自定义（P0）
 - 快捷键录制：捕获即规范化（Windows/Linux 的 Ctrl 归一为 `mod`；历史字面 Ctrl 记录在匹配/展示时折叠），localStorage 持久化。
@@ -42,8 +42,9 @@ src/client/
   index.ts                  # 入口：palette 字典、commandPalette 服务、shell.overlay 注册、可选集成
   service.ts                # PaletteRuntime：注册表 + 最近会话/录制桥
   builtin.ts                # 内置入口（sessions/workspaces/theme 服务）
-  better-sidebar.ts         # dsh-better-sidebar 可选集成（服务 + DOM 钩子）
-  settings-opener.ts        # 设置面板打开（标签匹配 + 探测 [role=dialog] nav）
+  better-sidebar.ts         # dsh-better-sidebar 终端入口（官方侧边栏优先，旧版回退）
+  sidebar-compat.ts         # 官方 sidebarRight 操作与旧 DOM 兼容选择
+  settings-opener.ts        # 设置面板打开（aria-label/导航标题优先，索引回退）
   PaletteOverlay.tsx        # 面板 UI（组件本地状态 + 注入 runtime/t；行序单一来源）
   hotkey.ts                 # mod 语义快捷键：解析/匹配/展示/规范化
   fuzzy.ts / prefs.ts / contract.ts / locales.ts / deps.ts / styles.ts
@@ -55,5 +56,6 @@ src/client/
 
 ## 测试
 
+- `node:test`：官方侧边栏优先/旧 DOM 回退、终端打开分工、动态开关文案、设置 aria-label 与标题定位/索引回退。
 - 手动验证矩阵：开合/录制/跨平台匹配、导航与渲染一致性、各入口行为、better-sidebar 增删时的入口出现/消失。
-- 后续：vitest 单测（fuzzy 排序、hotkey 规范化/匹配、prefs 持久化、registry 冲突/清理）。
+- 后续：补充 fuzzy 排序、hotkey 规范化/匹配、prefs 持久化、registry 冲突/清理的自动化用例。

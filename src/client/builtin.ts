@@ -186,10 +186,22 @@ export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): ()
       keywords: ['settings', 'preferences'],
       defaultHotkey: modHotkey(',', { alt: true }),
       choices: () => ([
-        { id: 'general', label: t('entry.settings.open.general'), execute: () => openSettingsSection(0) },
-        { id: 'models', label: t('entry.settings.open.models'), execute: () => openSettingsSection(1) },
-        { id: 'plugins', label: t('entry.settings.open.plugins'), execute: () => openSettingsSection(2) },
-        { id: 'agent-presets', label: t('entry.settings.open.agentPresets'), execute: () => openSettingsSection(3) },
+        {
+          id: 'general', label: t('entry.settings.open.general'),
+          execute: () => openSettingsSection(t('entry.settings.open.general'), 0),
+        },
+        {
+          id: 'models', label: t('entry.settings.open.models'),
+          execute: () => openSettingsSection(t('entry.settings.open.models'), 1),
+        },
+        {
+          id: 'plugins', label: t('entry.settings.open.plugins'),
+          execute: () => openSettingsSection(t('entry.settings.open.plugins'), 2),
+        },
+        {
+          id: 'agent-presets', label: t('entry.settings.open.agentPresets'),
+          execute: () => openSettingsSection(t('entry.settings.open.agentPresets'), 3),
+        },
       ]),
     }),
     runtime.register({

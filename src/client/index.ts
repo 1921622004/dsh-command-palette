@@ -9,6 +9,7 @@ import { en, zh } from './locales.ts'
 import { registerBuiltins } from './builtin.ts'
 import { registerBetterSidebarEntries, type BetterSidebarFace } from './better-sidebar.ts'
 import { createPetProbe, optionalIntegrationEntries } from './optional-integrations.ts'
+import type { OfficialSidebarFace } from './sidebar-compat.ts'
 import { PaletteOverlay } from './PaletteOverlay.tsx'
 import { createPaletteRuntime } from './service.ts'
 import { installPaletteStyles } from './styles.ts'
@@ -57,17 +58,18 @@ export function apply(ctx: ClientContext): void {
     () => registerBuiltins(runtime, { sessions: ctx.sessions, workspaces: ctx.workspaces, theme: ctx.theme, t }),
     'ui-command-palette: built-in entries',
   )
-  // Optional dsh-better-sidebar integration: entries live exactly while the
-  // `betterSidebar` service does (reactive inject, cleaned on its disposal).
-  // Optional integrations: task-board and skill-explorer probe their live DOM
-  // hooks on each read; pet uses one same-origin API presence probe at boot.
+  // The native right-Sidebar face is optional and read at action time; older
+  // compositions fall back to better-sidebar's DOM toggle. Task-board and
+  // skill-explorer probe live DOM hooks; pet uses a same-origin API probe.
   const pet = createPetProbe()
   pet.refresh()
-  runtime.setDynamicEntries(() => optionalIntegrationEntries(pet))
+  const officialSidebar = (): OfficialSidebarFace | undefined =>
+    ctx.get('sidebarRight') as OfficialSidebarFace | undefined
+  runtime.setDynamicEntries(() => optionalIntegrationEntries(pet, officialSidebar()))
   ctx.inject(['betterSidebar'], scope => {
     scope.effect(() => {
       const sidebar = scope.get('betterSidebar') as BetterSidebarFace
-      return registerBetterSidebarEntries(runtime, sidebar)
+      return registerBetterSidebarEntries(runtime, sidebar, officialSidebar)
     }, 'ui-command-palette: better-sidebar entries')
   })
   ctx.inject(['slots'], scope => {
