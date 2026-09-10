@@ -13,6 +13,12 @@ export interface PaletteChoice {
   readonly id: string
   /** Display label (already localized by the registrant). */
   readonly label: string
+  /**
+   * Short trailing chip after the label (data literal, same rule as the
+   * label): e.g. the workspace title on a session choice; participates in
+   * keyword matching.
+   */
+  readonly tag?: string
   readonly detail?: string
   /** Keep the palette open after this choice runs (used by shortcut recording). */
   readonly keepOpen?: boolean
@@ -28,6 +34,12 @@ export interface PaletteEntry {
   readonly labelKey?: PaletteKey
   /** Extension label: a literal, already-localized string. */
   readonly label?: string
+  /**
+   * Short trailing chip after the label (data literal, same rule as the
+   * label): e.g. the workspace title on a recent-session row. Absent on
+   * entries with no such fact; it participates in keyword matching.
+   */
+  readonly tag?: string
   /** Optional detail line (same key/literal rule as the label). */
   readonly detailKey?: PaletteKey
   readonly detail?: string

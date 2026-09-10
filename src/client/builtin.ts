@@ -71,6 +71,20 @@ const THEME_KEY: Record<ThemePreference, 'entry.settings.theme.light' | 'entry.s
 const RECENT_SESSION_LIMIT = 5
 
 /**
+ * Map every session to its workspace title from live membership: the data
+ * source of the project tag on session rows.
+ * @param workspaces - live workspaces face.
+ * @returns session id → workspace title; sessions outside every workspace are absent.
+ */
+function workspaceTitleBySession(workspaces: WorkspacesFace): Map<string, string> {
+  const titles = new Map<string, string>()
+  for (const workspace of workspaces.list.getSnapshot().items) {
+    for (const id of workspace.sessionIds) titles.set(id, workspace.title)
+  }
+  return titles
+}
+
+/**
  * Register the built-in entries on the runtime.
  * @param runtime - the palette runtime.
  * @param deps - live service faces plus the palette translator.
@@ -84,6 +98,7 @@ export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): ()
   // navigation).
   runtime.setRecentSessions(() => {
     const snap = sessions.list.getSnapshot()
+    const workspaceTitles = workspaceTitleBySession(workspaces)
     return snap.ids
       .filter(id => id !== snap.current)
       .map(id => ({ id, row: snap.byId[id] }))
@@ -93,13 +108,18 @@ export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): ()
         && entry.row.origin !== 'subagent')
       .sort((a, b) => (b.row.updatedAt ?? 0) - (a.row.updatedAt ?? 0))
       .slice(0, RECENT_SESSION_LIMIT)
-      .map(({ id, row }) => ({
-        id: `palette.session.recent.${id}`,
-        group: 'session' as const,
-        label: row.displayTitle,
-        keywords: ['session', 'recent'],
-        execute: () => sessions.open(id),
-      }))
+      .map(({ id, row }) => {
+        const tag = workspaceTitles.get(id)
+        return {
+          id: `palette.session.recent.${id}`,
+          group: 'session' as const,
+          label: row.displayTitle,
+          // The project name also matches the query, so typing it finds its sessions.
+          keywords: tag === undefined ? ['session', 'recent'] : ['session', 'recent', tag],
+          ...(tag === undefined ? {} : { tag }),
+          execute: () => sessions.open(id),
+        }
+      })
   })
   const disposers = [
     runtime.register({
@@ -132,13 +152,18 @@ export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): ()
       defaultHotkey: modHotkey('g', { alt: true }),
       choices: () => {
         const snap = sessions.list.getSnapshot()
+        const workspaceTitles = workspaceTitleBySession(workspaces)
         return snap.ids
           .filter(id => id !== snap.current && snap.byId[id]?.origin !== 'subagent')
-          .map(id => ({
-            id,
-            label: snap.byId[id]?.displayTitle ?? id,
-            execute: () => sessions.open(id),
-          }))
+          .map(id => {
+            const tag = workspaceTitles.get(id)
+            return {
+              id,
+              label: snap.byId[id]?.displayTitle ?? id,
+              ...(tag === undefined ? {} : { tag }),
+              execute: () => sessions.open(id),
+            }
+          })
       },
     }),
     runtime.register({

@@ -24,6 +24,8 @@ export interface SessionRow {
 /** One workspace row (`WorkspaceView` projection slice). */
 export interface WorkspaceRow {
   readonly workspaceId: string
+  /** User-visible workspace title (the sidebar group label source). */
+  readonly title: string
   readonly sessionIds: readonly string[]
 }
 

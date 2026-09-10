@@ -275,6 +275,7 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
       return rankItems(sub.choices.map(choice => ({
         label: choice.label,
         detail: choice.detail,
+        keywords: choice.tag === undefined ? undefined : [choice.tag],
         row: { entry: sub.entry, choice },
       })), query).map(scored => scored.row)
     }
@@ -287,7 +288,7 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
     } => ({
       label: labelOf(t, entry.labelKey, entry.label),
       detail: labelOf(t, entry.detailKey, entry.detail) || undefined,
-      keywords: entry.keywords,
+      keywords: entry.tag === undefined ? entry.keywords : [...entry.keywords ?? [], entry.tag],
       id: entry.id,
       row: { entry },
     })
@@ -389,6 +390,12 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
                 onClick={() => run(row)}
               >
                 <span className="dsh-palette-row-main">{row.choice!.label}</span>
+                {row.choice!.tag !== undefined && (
+                  <span
+                    className="dsh-palette-row-tag"
+                    title={row.choice!.tag}
+                  >{row.choice!.tag}</span>
+                )}
                 {row.choice!.detail !== undefined && (
                   <span className="dsh-palette-row-detail">{row.choice!.detail}</span>
                 )}
@@ -415,6 +422,12 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
                         <span className="dsh-palette-row-main">
                           {labelOf(t, row.entry.labelKey, row.entry.label)}
                         </span>
+                        {row.entry.tag !== undefined && (
+                          <span
+                            className="dsh-palette-row-tag"
+                            title={row.entry.tag}
+                          >{row.entry.tag}</span>
+                        )}
                         {labelOf(t, row.entry.detailKey, row.entry.detail) !== '' && (
                           <span className="dsh-palette-row-detail">{labelOf(t, row.entry.detailKey, row.entry.detail)}</span>
                         )}

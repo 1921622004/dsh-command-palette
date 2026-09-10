@@ -90,6 +90,19 @@ export const PALETTE_CSS = `
   color: var(--dsw-alias-label-tertiary);
   white-space: nowrap;
 }
+.dsh-palette-row-tag {
+  flex: none;
+  max-width: 5em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 5px;
+  border-radius: 5px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  font-size: 10px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-secondary);
+}
 .dsh-palette-row-shortcut {
   flex: none;
   padding: 1px 5px;
