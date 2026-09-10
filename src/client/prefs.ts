@@ -2,12 +2,15 @@
  * Palette preferences: browser-local persistence for pinned/hidden entries,
  * recently-used order, the palette-open hotkey, and per-command direct
  * shortcut overrides. Whole-value JSON under one localStorage key; older
- * values without `bindings` migrate in place by taking the empty default.
+ * values without `bindings` migrate in place by taking the empty default, and
+ * values written before the rename are read from their original key.
  */
 import type { PaletteEntry, PalettePrefs } from './contract.ts'
 import { DEFAULT_HOTKEY, type Hotkey } from './hotkey.ts'
 
-const STORAGE_KEY = 'dsh-command-palette.prefs.v1'
+const STORAGE_KEY = 'dsh-palette.prefs.v1'
+/** Key used before the package rename; read-only fallback so saved settings survive. */
+const LEGACY_STORAGE_KEY = 'dsh-command-palette.prefs.v1'
 const RECENT_LIMIT = 5
 
 /** Preference defaults: nothing pinned/hidden/recent; all shortcut defaults apply. */
@@ -62,7 +65,9 @@ function coercePrefs(value: unknown): PalettePrefs {
 /** Load persisted preferences (defaults when absent or unreadable). */
 export function loadPrefs(): PalettePrefs {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    // Fall back to the pre-rename key so an existing setup keeps its
+    // customized shortcuts; the next save writes the current key.
+    const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY)
     return raw === null ? DEFAULT_PREFS : coercePrefs(JSON.parse(raw))
   } catch {
     // Unreadable storage (quota/private mode) behaves as absent: defaults.

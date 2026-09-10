@@ -8,7 +8,7 @@
  */
 import { defineConfig } from 'tsdown'
 
-const CLIENT_ID = 'dsh-command-palette'
+const CLIENT_ID = 'dsh-palette'
 const CLIENT_EXTERNALS = [
   'react',
   'react/jsx-runtime',

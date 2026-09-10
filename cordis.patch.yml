@@ -2,5 +2,5 @@
 # plugin (presence-only); the browser half ships the palette UI through the
 # package's dsh.client declaration.
 - insert:
-    - id: ui-command-palette
-      name: dsh-command-palette
+    - id: ui-palette
+      name: dsh-palette

@@ -146,9 +146,9 @@ export const PALETTE_CSS = `
 
 /** Install the palette stylesheet once per document; idempotent. */
 export function installPaletteStyles(): void {
-  if (document.querySelector('style[data-dsh-command-palette]') !== null) return
+  if (document.querySelector('style[data-dsh-palette]') !== null) return
   const tag = document.createElement('style')
-  tag.setAttribute('data-dsh-command-palette', '')
+  tag.setAttribute('data-dsh-palette', '')
   tag.textContent = PALETTE_CSS
   document.head.appendChild(tag)
 }

@@ -75,6 +75,8 @@
 
 ## 安装
 
+包名为 `dsh-palette`（仓库名沿用 `dsh-command-palette`）。
+
 ```bash
 git clone git@github.com:1921622004/dsh-command-palette.git
 cd dsh-command-palette
@@ -99,7 +101,7 @@ pnpm run build
 ## 卸载
 
 ```bash
-dsh plugin --profile web remove dsh-command-palette
+dsh plugin --profile web remove dsh-palette
 ```
 
 卸载后重启 `dsh web`。

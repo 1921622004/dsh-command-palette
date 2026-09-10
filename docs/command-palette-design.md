@@ -32,7 +32,7 @@
 ### 3. 自定义（P0）
 - 快捷键录制：捕获即规范化（Windows/Linux 的 Ctrl 归一为 `mod`；历史字面 Ctrl 记录在匹配/展示时折叠），localStorage 持久化。
 - 扩展点：`register({ id, group, labelKey|label, detailKey|detail, keywords?, choices?, execute? })`，id 冲突 fail-loud，注册即 effect。
-- 用户偏好：置顶/隐藏/最近使用（上限 5），键 `dsh-command-palette.prefs.v1`。
+- 用户偏好：置顶/隐藏/最近使用（上限 5），键 `dsh-palette.prefs.v1`；改名前的 `dsh-command-palette.prefs.v1` 作为只读回退继续读取，下次保存写入新键。
 
 ## 架构
 
