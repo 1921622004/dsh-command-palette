@@ -4,6 +4,17 @@
   "description": "Command palette (⌘K) for the DeepSeek Harness Web GUI: keyboard-first quick entries over sessions, settings, and actions, with a customizable hotkey and a register extension point.",
   "version": "0.1.0",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/1921622004/dsh-command-palette.git"
+  },
+  "homepage": "https://github.com/1921622004/dsh-command-palette#readme",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "command-palette",
+    "keyboard-shortcuts"
+  ],
   "type": "module",
   "engines": {
     "node": "^22.19.0 || >=24.0.0"

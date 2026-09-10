@@ -76,28 +76,23 @@
 
 ## 安装
 
-包名为 `dsh-palette`（仓库名沿用 `dsh-command-palette`）。
+包名是 `dsh-palette`（GitHub 仓库名沿用 `dsh-command-palette`）。
 
 ```bash
-git clone git@github.com:1921622004/dsh-command-palette.git
-cd dsh-command-palette
-pnpm install
-pnpm run build
-dsh plugin --profile web add "$PWD"
+dsh plugin --profile web add dsh-palette@latest
 ```
 
-安装完成后重启 `dsh web`，刷新页面即可使用。
+安装完成后重启 `dsh web`，刷新页面，按 `⌘K`（Windows / Linux 为 `Ctrl+K`）即可使用。
+
+该命令会自动把它登记为 profile 插件层（包内声明了 `cordis.patch.yml`），不需要手工改配置。
 
 ## 更新
 
 ```bash
-cd dsh-command-palette
-git pull
-pnpm install
-pnpm run build
+dsh plugin --profile web add dsh-palette@latest
 ```
 
-客户端功能更新后通常刷新页面即可；如果更新涉及宿主功能，请重启 `dsh web`。
+客户端功能更新后刷新页面即可；若更新涉及宿主功能（`/open-folder` 命令），请重启 `dsh web`。
 
 ## 卸载
 
@@ -110,13 +105,22 @@ dsh plugin --profile web remove dsh-palette
 ## 开发
 
 ```bash
+pnpm install
 pnpm run test
 pnpm run typecheck
 pnpm run build
 pnpm run dev
 ```
 
-`pnpm run dev` 会监听源代码并重新构建插件。
+改代码时用软链方式安装，构建后刷新页面即可生效（`pnpm run dev` 会监听源码自动重建）：
+
+```bash
+dsh plugin --profile web add "$PWD"
+```
+
+软链安装与上面的 npm 安装是同一个包名，二者互斥；切换前先 `dsh plugin --profile web remove dsh-palette`。
+
+发布新版本：改 `package.json` 的 `version`（npm 不接受重复版本号）后执行 `npm publish`（`prepack` 会自动构建）。
 
 ## 许可证
 
