@@ -13,6 +13,7 @@ function official(expanded: boolean): OfficialSidebarFace & { toggles: number } 
     toggles: 0,
     isExpanded() { return this.expanded },
     toggleExpanded() { this.toggles += 1; this.expanded = !this.expanded },
+    openTab() {},
   }
 }
 

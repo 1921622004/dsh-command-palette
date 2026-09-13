@@ -63,11 +63,13 @@ export function createPetProbe(): PetProbe {
  * Compute the optional integration entries for one palette open.
  * @param pet - the pet API probe.
  * @param officialSidebar - DSH native right-Sidebar face, when composed.
+ * @param hasContextTab - whether dsh-context registered its sidebar tab.
  * @returns entries for every integration whose plugin is present.
  */
 export function optionalIntegrationEntries(
   pet: PetProbe,
   officialSidebar?: OfficialSidebarFace,
+  hasContextTab?: () => boolean,
 ): readonly PaletteEntry[] {
   const entries: PaletteEntry[] = []
   // Prefer DSH's native right-Sidebar face. Older better-sidebar versions
@@ -82,12 +84,24 @@ export function optionalIntegrationEntries(
       ?? !document.body.hasAttribute('data-dsh-sidebar-collapsed')
     entries.push({
       id: 'palette.sidebar.open',
-      group: 'extension',
+      group: 'sidebar',
       labelKey: sidebarLabelKey(expanded),
       detailKey: 'entry.sidebar.toggle.detail',
       keywords: ['sidebar', 'panel'],
       defaultHotkey: modHotkey('j'),
       execute: () => { toggleSidebar(officialSidebar, legacyClick) },
+    })
+  }
+  // dsh-context registers a 'dsh-context'-kind page tab into the official
+  // sidebar; opened through the same native face.
+  if (officialSidebar !== undefined && hasContextTab?.() === true) {
+    entries.push({
+      id: 'palette.integration.context',
+      group: 'sidebar',
+      labelKey: 'entry.context.open',
+      detailKey: 'entry.context.detail',
+      keywords: ['context'],
+      execute: () => { officialSidebar.openTab('dsh-context') },
     })
   }
   const board = sidebarButton('[data-dsh-taskboard-entry]')

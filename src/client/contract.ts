@@ -6,7 +6,7 @@ import type { PaletteKey } from './locales.ts'
 import type { Hotkey } from './hotkey.ts'
 
 /** Entry group; rendering order follows this union's declaration order. */
-export type PaletteGroupId = 'session' | 'settings' | 'action' | 'extension'
+export type PaletteGroupId = 'session' | 'sidebar' | 'settings' | 'action' | 'extension'
 
 /** One option of an entry's second-level choice list. */
 export interface PaletteChoice {

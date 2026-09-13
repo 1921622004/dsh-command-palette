@@ -1,7 +1,7 @@
 /**
  * Optional dsh-better-sidebar integration. The plugin exposes the
  * `betterSidebar` service for tab types and `openTab`; current versions also
- * cooperate with DSH's native `sidebarRight` face. Terminal opens prefer the
+ * cooperate with DSH's native `sidebarRight` face. Tab opens prefer the
  * native face and fall back to the older DOM panel toggle. Entries register
  * only while the better-sidebar service is up.
  */
@@ -28,8 +28,8 @@ function legacySidebarOpenClick(): (() => void) | undefined {
 /**
  * Register the better-sidebar entries on the runtime. The panel toggle
  * lives in optional-integrations (a true switch with a state-following
- * label); this module keeps the terminal entry, which needs the service's
- * openTab face.
+ * label); this module keeps the entries that need the service's openTab
+ * face: files, file changes, and terminal.
  * @param runtime - the palette runtime.
  * @param sidebar - the live `betterSidebar` service face.
  * @param officialSidebar - current official right-Sidebar face, when supplied.
@@ -40,20 +40,37 @@ export function registerBetterSidebarEntries(
   sidebar: BetterSidebarFace,
   officialSidebar: () => OfficialSidebarFace | undefined = () => undefined,
 ): () => void {
+  /** Open one tab type, revealing the surface it lands in. */
+  const open = (type: string): void => {
+    if (sidebar.isTabEnabled(type) === false) return
+    const official = officialSidebar()
+    prepareTerminalOpen(official, official === undefined ? legacySidebarOpenClick() : undefined)
+    sidebar.openTab({ type })
+  }
   const disposers = [
     runtime.register({
+      id: 'palette.sidebar.files',
+      group: 'sidebar',
+      labelKey: 'entry.sidebar.files',
+      detailKey: 'entry.sidebar.files.detail',
+      keywords: ['files', 'explorer', 'editor'],
+      execute: () => open('editor'),
+    }),
+    runtime.register({
+      id: 'palette.sidebar.changes',
+      group: 'sidebar',
+      labelKey: 'entry.sidebar.changes',
+      keywords: ['changes', 'git', 'diff'],
+      execute: () => open('git'),
+    }),
+    runtime.register({
       id: 'palette.sidebar.terminal',
-      group: 'extension',
+      group: 'sidebar',
       labelKey: 'entry.sidebar.terminal',
       detailKey: 'entry.sidebar.terminal.detail',
       keywords: ['terminal', 'shell', 'pty'],
       defaultHotkey: modHotkey('j', { shift: true }),
-      execute: () => {
-        if (sidebar.isTabEnabled('terminal') === false) return
-        const official = officialSidebar()
-        prepareTerminalOpen(official, official === undefined ? legacySidebarOpenClick() : undefined)
-        sidebar.openTab({ type: 'terminal' })
-      },
+      execute: () => open('terminal'),
     }),
   ]
   return () => {

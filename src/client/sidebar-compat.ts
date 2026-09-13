@@ -8,6 +8,8 @@
 export interface OfficialSidebarFace {
   isExpanded(): boolean
   toggleExpanded(): void
+  /** Open a registered page tab by kind (e.g. dsh-context's tab). */
+  openTab(kind: string, options?: { readonly params?: unknown }): void
 }
 
 /** Result of choosing the sidebar integration. */

@@ -60,12 +60,19 @@ export function apply(ctx: ClientContext): void {
   )
   // The native right-Sidebar face is optional and read at action time; older
   // compositions fall back to better-sidebar's DOM toggle. Task-board and
-  // skill-explorer probe live DOM hooks; pet uses a same-origin API probe.
+  // skill-explorer probe live DOM hooks; pet uses a same-origin API probe;
+  // dsh-context is detected through its registered sidebar tab type.
   const pet = createPetProbe()
   pet.refresh()
   const officialSidebar = (): OfficialSidebarFace | undefined =>
     ctx.get('sidebarRight') as OfficialSidebarFace | undefined
-  runtime.setDynamicEntries(() => optionalIntegrationEntries(pet, officialSidebar()))
+  const hasContextTab = (): boolean => {
+    const tabs = ctx.get('sidebarRightTabs') as
+      | { entries(): readonly { readonly kind: string }[] }
+      | undefined
+    return tabs?.entries().some(entry => entry.kind === 'dsh-context') ?? false
+  }
+  runtime.setDynamicEntries(() => optionalIntegrationEntries(pet, officialSidebar(), hasContextTab))
   ctx.inject(['betterSidebar'], scope => {
     scope.effect(() => {
       const sidebar = scope.get('betterSidebar') as BetterSidebarFace

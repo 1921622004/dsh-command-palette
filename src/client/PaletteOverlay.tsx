@@ -18,10 +18,11 @@ import {
 } from './prefs.ts'
 
 /** Group order for rendering. */
-const GROUP_ORDER: readonly PaletteEntry['group'][] = ['session', 'settings', 'action', 'extension']
+const GROUP_ORDER: readonly PaletteEntry['group'][] = ['session', 'sidebar', 'settings', 'action', 'extension']
 
 const GROUP_KEY: Record<PaletteEntry['group'], PaletteKey> = {
   session: 'group.session',
+  sidebar: 'group.sidebar',
   settings: 'group.settings',
   action: 'group.action',
   extension: 'group.extension',
