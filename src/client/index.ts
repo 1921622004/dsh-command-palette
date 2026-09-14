@@ -72,7 +72,10 @@ export function apply(ctx: ClientContext): void {
       | undefined
     return tabs?.entries().some(entry => entry.kind === 'dsh-context') ?? false
   }
-  runtime.setDynamicEntries(() => optionalIntegrationEntries(pet, officialSidebar(), hasContextTab))
+  runtime.setDynamicEntries(() => {
+    pet.refresh()
+    return optionalIntegrationEntries(pet, officialSidebar(), hasContextTab)
+  })
   ctx.inject(['betterSidebar'], scope => {
     scope.effect(() => {
       const sidebar = scope.get('betterSidebar') as BetterSidebarFace

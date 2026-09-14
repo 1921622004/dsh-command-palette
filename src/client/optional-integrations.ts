@@ -40,22 +40,43 @@ async function petFetch(path: string, body?: unknown): Promise<unknown> {
 export interface PetProbe {
   /** Whether the pet host API answered the presence probe. */
   alive(): boolean
-  /** Re-run the presence probe (fire-and-forget). */
-  refresh(): void
-  /** POST the visibility verb. */
+  /** Last known master-switch state; defaults to visible until a probe lands. */
+  visible(): boolean
+  /** Re-run the presence/visibility probe; callers may ignore the promise. */
+  refresh(): Promise<void>
+  /** Flip the master switch to the given value (host-persisted). */
   setVisible(visible: boolean): Promise<void>
+  /** Fetch fresh state and flip the master switch to its opposite. */
+  toggle(): Promise<void>
 }
 
 /** Create the pet API probe state. */
 export function createPetProbe(): PetProbe {
   let alive = false
+  let visible = true
+  const applyState = (state: unknown): void => {
+    alive = true
+    const shown = (state as { display?: { visible?: boolean } }).display?.visible
+    if (typeof shown === 'boolean') visible = shown
+  }
   return {
     alive: () => alive,
+    visible: () => visible,
     refresh() {
-      void petFetch('/api/pet/pets')
-        .then(() => { alive = true }, () => { alive = false })
+      return petFetch('/api/pet/state')
+        .then(applyState, () => { alive = false })
     },
-    setVisible: async visible => void await petFetch('/api/pet/set-visible', { visible }),
+    setVisible: async visibleValue => {
+      await petFetch('/api/pet/set-visible', { visible: visibleValue })
+      visible = visibleValue
+    },
+    async toggle() {
+      // Read fresh state so the flip lands correctly even if the cache is stale.
+      const state = await petFetch('/api/pet/state') as { display?: { visible?: boolean } }
+      applyState(state)
+      const next = !(state.display?.visible ?? visible)
+      await this.setVisible(next)
+    },
   }
 }
 
@@ -130,21 +151,13 @@ export function optionalIntegrationEntries(
   }
   if (pet.alive()) {
     entries.push({
-      id: 'palette.integration.pet.show',
-      group: 'extension',
-      labelKey: 'entry.pet.show',
+      id: 'palette.integration.pet',
+      group: 'sidebar',
+      labelKey: pet.visible() ? 'entry.pet.hide' : 'entry.pet.show',
       detailKey: 'entry.pet.detail',
-      keywords: ['pet', 'show'],
+      keywords: ['pet', 'show', 'hide'],
       defaultHotkey: modHotkey('p', { alt: true }),
-      execute: () => pet.setVisible(true),
-    }, {
-      id: 'palette.integration.pet.hide',
-      group: 'extension',
-      labelKey: 'entry.pet.hide',
-      detailKey: 'entry.pet.detail',
-      keywords: ['pet', 'hide'],
-      defaultHotkey: modHotkey('p', { alt: true, shift: true }),
-      execute: () => pet.setVisible(false),
+      execute: () => pet.toggle(),
     })
   }
   return entries
