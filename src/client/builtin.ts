@@ -194,6 +194,29 @@ export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): ()
       },
     }),
     runtime.register({
+      id: 'palette.session.rename',
+      group: 'action',
+      labelKey: 'entry.session.rename',
+      detailKey: 'entry.session.rename.detail',
+      keywords: ['rename', 'title'],
+      keepOpen: true,
+      execute: () => {
+        const snap = sessions.list.getSnapshot()
+        const current = snap.current
+        if (current === undefined) return
+        runtime.beginRename({
+          sessionId: current,
+          original: snap.byId[current]?.displayTitle ?? current,
+          confirm: async title => {
+            const binding = sessions.binding(current)
+            if (binding === undefined) throw new Error('session unavailable')
+            const result = await binding.session.rename(title)
+            if (!result.ok) throw new Error(result.error.message)
+          },
+        })
+      },
+    }),
+    runtime.register({
       id: 'palette.session.interrupt',
       group: 'action',
       labelKey: 'entry.session.interrupt',

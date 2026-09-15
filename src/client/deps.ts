@@ -46,9 +46,19 @@ export interface SessionsFace {
       cancel(): Promise<unknown>
       /** Execute one slash-command line against the session's agent. */
       command(line: string): Promise<unknown>
+      /**
+       * Rename the session (an explicit title pins it against automatic
+       * regeneration); resolves ok, or rejects through the caller.
+       */
+      rename(title: string): Promise<RenameResult>
     }
   } | undefined
 }
+
+/** Structural slice of the wire result the rename verb answers with. */
+export type RenameResult =
+  | { readonly ok: true }
+  | { readonly ok: false, readonly error: { readonly message: string } }
 
 /** Built-in theme preferences (`ui-theme`'s closed set). */
 export type ThemePreference = 'light' | 'dark' | 'system'

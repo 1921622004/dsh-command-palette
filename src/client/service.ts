@@ -9,6 +9,19 @@ import type { PaletteEntry, PaletteRuntimeFace } from './contract.ts'
 /** Callback fired when the user asks to record the palette or one entry shortcut. */
 export type RecordingRequest = (entryId?: string) => void
 
+/** One rename interaction handed to the view: prefill plus the confirm verb. */
+export interface RenameRequestPayload {
+  /** The session being renamed. */
+  readonly sessionId: string
+  /** Current display title, prefilled into the palette input. */
+  readonly original: string
+  /** Apply the new title; rejects with a user-visible error. */
+  confirm(title: string): Promise<void>
+}
+
+/** Callback fired when the user asks to rename the current session. */
+export type RenameRequest = (request: RenameRequestPayload) => void
+
 /** The runtime's full face: the public registry plus view-internal wiring. */
 export interface PaletteRuntime extends PaletteRuntimeFace {
   /** Live entries in registration order. */
@@ -25,6 +38,10 @@ export interface PaletteRuntime extends PaletteRuntimeFace {
   onRecordingRequest(cb: RecordingRequest | null): void
   /** Fire the installed recording listener for the palette or one entry. */
   beginHotkeyRecording(entryId?: string): void
+  /** Install the view's rename listener (the view owns input and confirm UX). */
+  onRenameRequest(cb: RenameRequest | null): void
+  /** Hand one rename interaction to the view. */
+  beginRename(request: RenameRequestPayload): void
 }
 
 /** Live mutable state behind the runtime face. */
@@ -33,6 +50,7 @@ interface Live {
   recentSessions: (() => readonly PaletteEntry[]) | null
   dynamicEntries: (() => readonly PaletteEntry[]) | null
   recordingRequest: RecordingRequest | null
+  renameRequest: RenameRequest | null
 }
 
 /**
@@ -45,7 +63,13 @@ export function createPaletteRuntime(
   provide: (name: string, value: unknown) => () => void,
   effect: (register: () => () => void) => void,
 ): PaletteRuntime {
-  const live: Live = { registry: new Map(), recentSessions: null, dynamicEntries: null, recordingRequest: null }
+  const live: Live = {
+    registry: new Map(),
+    recentSessions: null,
+    dynamicEntries: null,
+    recordingRequest: null,
+    renameRequest: null,
+  }
   const runtime: PaletteRuntime = {
     register(entry) {
       if (live.registry.has(entry.id)) throw new Error(`command palette: duplicate entry id "${entry.id}"`)
@@ -68,6 +92,12 @@ export function createPaletteRuntime(
     },
     beginHotkeyRecording(entryId) {
       live.recordingRequest?.(entryId)
+    },
+    onRenameRequest(cb) {
+      live.renameRequest = cb
+    },
+    beginRename(request) {
+      live.renameRequest?.(request)
     },
   }
   effect(() => provide('commandPalette', runtime))

@@ -9,6 +9,7 @@ import type { JSX, KeyboardEvent } from 'react'
 import type { PaletteChoice, PaletteEntry, PalettePrefs } from './contract.ts'
 import type { PaletteKey } from './locales.ts'
 import type { PaletteRuntime } from './service.ts'
+import type { RenameRequestPayload } from './service.ts'
 import { rankItems } from './fuzzy.ts'
 import {
   eventToHotkey, formatHotkey, isGlobalHotkey, matchesHotkey, sameHotkey, type Hotkey,
@@ -46,6 +47,9 @@ interface RecordingTarget {
   readonly label: string
 }
 
+/** Rename interaction in progress; the palette input is the name editor. */
+type RenameTarget = RenameRequestPayload
+
 /** Resolve one entry's display label through the locale seat. */
 function labelOf(t: PaletteOverlayProps['t'], key: PaletteKey | undefined, literal: string | undefined): string {
   return key !== undefined ? t(key) : literal ?? ''
@@ -66,6 +70,7 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
   const [active, setActive] = useState(0)
   const [sub, setSub] = useState<{ readonly entry: PaletteEntry; readonly choices: readonly PaletteChoice[] } | null>(null)
   const [recording, setRecording] = useState<RecordingTarget | null>(null)
+  const [rename, setRename] = useState<RenameTarget | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [prefs, setPrefs] = useState<PalettePrefs>(() => loadPrefs())
   const inputRef = useRef<HTMLInputElement>(null)
@@ -92,6 +97,7 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
     setQuery('')
     setError(null)
     setRecording(null)
+    setRename(null)
   }, [])
 
   const openPalette = useCallback(() => {
@@ -101,6 +107,7 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
     setActive(0)
     setError(null)
     setRecording(null)
+    setRename(null)
     hoverArmed.current = true
   }, [])
 
@@ -139,6 +146,7 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
   /** Execute an entry directly or open its second-level choice list. */
   const invokeEntry = useCallback((entry: PaletteEntry): void => {
     setError(null)
+    setRename(null)
     if (entry.choices !== undefined) {
       let choices: readonly PaletteChoice[] | null
       try {
@@ -267,9 +275,39 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
     return () => palette.onRecordingRequest(null)
   }, [allEntries, palette, t])
 
+  // The rename entry hands over a prefill plus confirm verb; the input
+  // becomes the name editor until Enter confirms or Esc cancels.
+  useEffect(() => {
+    palette.onRenameRequest(request => {
+      setOpen(true)
+      setSub(null)
+      setQuery(request.original)
+      setActive(0)
+      setError(null)
+      setRecording(null)
+      setRename(request)
+    })
+    return () => palette.onRenameRequest(null)
+  }, [palette])
+
+  /** Apply the typed title; failure keeps the mode open with the error line. */
+  const confirmRename = useCallback((): void => {
+    const title = query.trim()
+    if (rename === null) return
+    if (title === '') {
+      setError(t('rename.empty'))
+      return
+    }
+    const request = rename
+    setError(null)
+    void request.confirm(title)
+      .then(() => { close() })
+      .catch(reason => { setError(t('status.error', { message: errorText(reason) })) })
+  }, [close, query, rename, t])
+
   useEffect(() => {
     if (open) requestAnimationFrame(() => inputRef.current?.focus())
-  }, [open, sub])
+  }, [open, sub, rename])
 
   const visibleEntries = useMemo(
     () => allEntries().filter(entry => !prefs.hidden.includes(entry.id)),
@@ -340,6 +378,20 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
     if (event.metaKey || event.ctrlKey || event.altKey) return
     // Keyboard input suspends hover ownership until the pointer moves again.
     hoverArmed.current = false
+    if (rename !== null) {
+      // The input is the name editor: Enter confirms, Esc cancels, everything
+      // else is plain text editing.
+      if (event.key === 'Enter') {
+        event.preventDefault()
+        confirmRename()
+      } else if (event.key === 'Escape') {
+        event.preventDefault()
+        setRename(null)
+        setQuery('')
+        setError(null)
+      }
+      return
+    }
     if (event.key === 'ArrowDown') {
       event.preventDefault()
       setActive(current => (rows.length === 0 ? 0 : (current + 1) % rows.length))
@@ -380,9 +432,11 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
           ref={inputRef}
           className="dsh-palette-search"
           value={query}
-          placeholder={sub !== null
-            ? t('search.placeholder.sub', { entry: labelOf(t, sub.entry.labelKey, sub.entry.label) })
-            : t('search.placeholder')}
+          placeholder={rename !== null
+            ? t('rename.placeholder')
+            : sub !== null
+              ? t('search.placeholder.sub', { entry: labelOf(t, sub.entry.labelKey, sub.entry.label) })
+              : t('search.placeholder')}
           onChange={event => setQuery(event.target.value)}
           onKeyDown={onKeyDown}
         />
@@ -391,8 +445,11 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
           ref={listRef}
           onMouseMove={() => { hoverArmed.current = true }}
         >
-          {rows.length === 0 && <div className="dsh-palette-empty">{t('status.empty')}</div>}
-          {sub !== null
+          {rename !== null
+            ? <div className="dsh-palette-empty">{t('rename.hint')}</div>
+            : <>
+              {rows.length === 0 && <div className="dsh-palette-empty">{t('status.empty')}</div>}
+              {sub !== null
             ? rows.map((row, i) => (
               <div
                 key={row.choice!.id}
@@ -455,6 +512,8 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
                 ]
               })
             })()}
+            </>
+          }
         </div>
         {recording !== null && (
           <div className="dsh-palette-note" data-kind="recording">
@@ -467,7 +526,7 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
           <div className="dsh-palette-note" data-kind="error">{error}</div>
         )}
         <div className="dsh-palette-footer">
-          <span>↑↓ · Enter · Tab · Esc</span>
+          <span>{rename !== null ? 'Enter · Esc' : '↑↓ · Enter · Tab · Esc'}</span>
           <span className="dsh-palette-footer-kbd">{formatHotkey(hotkey)}</span>
         </div>
       </div>
