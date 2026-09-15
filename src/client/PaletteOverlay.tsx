@@ -70,6 +70,10 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
   const [prefs, setPrefs] = useState<PalettePrefs>(() => loadPrefs())
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  // Hover owns the highlight only after real pointer movement; any keyboard
+  // press suspends it, so rows sliding under a stationary cursor during
+  // keyboard navigation or list scrolling cannot fight the arrows.
+  const hoverArmed = useRef(true)
 
   const hotkey = effectiveHotkey(prefs)
   // The global listener reads current state through one ref, so it need not
@@ -97,6 +101,7 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
     setActive(0)
     setError(null)
     setRecording(null)
+    hoverArmed.current = true
   }, [])
 
   /** Live registry snapshot, deduplicated by id (registered entries win). */
@@ -333,6 +338,8 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
     // Modifier chords belong to the direct-shortcut layer (window listener);
     // plain keys drive palette navigation.
     if (event.metaKey || event.ctrlKey || event.altKey) return
+    // Keyboard input suspends hover ownership until the pointer moves again.
+    hoverArmed.current = false
     if (event.key === 'ArrowDown') {
       event.preventDefault()
       setActive(current => (rows.length === 0 ? 0 : (current + 1) % rows.length))
@@ -379,7 +386,11 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
           onChange={event => setQuery(event.target.value)}
           onKeyDown={onKeyDown}
         />
-        <div className="dsh-palette-list" ref={listRef}>
+        <div
+          className="dsh-palette-list"
+          ref={listRef}
+          onMouseMove={() => { hoverArmed.current = true }}
+        >
           {rows.length === 0 && <div className="dsh-palette-empty">{t('status.empty')}</div>}
           {sub !== null
             ? rows.map((row, i) => (
@@ -387,7 +398,7 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
                 key={row.choice!.id}
                 className="dsh-palette-row"
                 data-active={i === active}
-                onMouseEnter={() => setActive(i)}
+                onMouseEnter={() => { if (hoverArmed.current) setActive(i) }}
                 onClick={() => run(row)}
               >
                 <span className="dsh-palette-row-main">{row.choice!.label}</span>
@@ -417,7 +428,7 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
                         key={row.entry.id}
                         className="dsh-palette-row"
                         data-active={i === active}
-                        onMouseEnter={() => setActive(i)}
+                        onMouseEnter={() => { if (hoverArmed.current) setActive(i) }}
                         onClick={() => run(row)}
                       >
                         <span className="dsh-palette-row-main">
