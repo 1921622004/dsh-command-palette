@@ -121,7 +121,11 @@ dsh plugin --profile web add "$PWD"
 
 软链安装与上面的 npm 安装是同一个包名，二者互斥；切换前先 `dsh plugin --profile web remove dsh-palette`。
 
-发布新版本：改 `package.json` 的 `version`（npm 不接受重复版本号）后执行 `npm publish`（`prepack` 会自动构建）。
+发布新版本：改 `package.json` 的 `version`（npm 不接受重复版本号）后执行 `npm publish`（`prepack` 会自动构建），并在 [CHANGELOG.md](CHANGELOG.md) 记录本次变更。
+
+## 更新日志
+
+见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 许可证
 
