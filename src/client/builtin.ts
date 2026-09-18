@@ -7,7 +7,7 @@ import type { PaletteEntry } from './contract.ts'
 export type { PaletteEntry }
 import type { PaletteRuntime } from './service.ts'
 import type {
-  PaletteTranslate, SessionsFace, ThemeFace, ThemePreference, WorkspacesFace,
+  PaletteTranslate, SessionsFace, ThemeFace, ThemePreference, WorkspacesFace, WorkspaceUiFace,
 } from './deps.ts'
 import { formatHotkey, modHotkey } from './hotkey.ts'
 import { effectiveEntryHotkey, loadPrefs } from './prefs.ts'
@@ -17,41 +17,28 @@ import { openSettingsSection } from './settings-opener.ts'
 export interface BuiltinDeps {
   readonly sessions: SessionsFace
   readonly workspaces: WorkspacesFace
+  readonly ui: WorkspaceUiFace
   readonly theme: ThemeFace
   readonly t: PaletteTranslate
 }
 
-/** Step to the neighboring session in host-list order; no-op at the ends. */
-function stepSession(sessions: SessionsFace, delta: -1 | 1): void {
-  const snap = sessions.list.getSnapshot()
-  const index = snap.current === undefined ? -1 : snap.ids.indexOf(snap.current)
-  const target = snap.ids[index + delta]
-  if (target !== undefined && target !== snap.current) sessions.open(target)
+/**
+ * The session the main view shows: the row the host retains through its
+ * `mainView` reference source. Upstream removed the list-level `current`
+ * field ("navigation belongs to view owners"); retention is the surviving
+ * authority, the same one `ui-session` reads to project the main binding.
+ */
+function currentSessionId(snap: ReturnType<SessionsFace['list']['getSnapshot']>): string | undefined {
+  return snap.ids.find(id => (snap.byId[id]?.retainedBy?.mainView ?? 0) > 0)
 }
 
-/**
- * Start the next session: mirror ui-workspace's startSession — target the
- * current session's workspace, else the first listed one; reuse its reusable
- * blank session, else create one; then select it.
- * @param sessions - live sessions face.
- * @param workspaces - live workspaces face.
- */
-async function startSession(sessions: SessionsFace, workspaces: WorkspacesFace): Promise<void> {
-  const ws = workspaces.list.getSnapshot()
+/** Step to the neighboring session in host-list order; no-op at the ends. */
+function stepSession(ui: WorkspaceUiFace, sessions: SessionsFace, delta: -1 | 1): void {
   const snap = sessions.list.getSnapshot()
-  const current = snap.current
-  const target = (current === undefined
-    ? undefined
-    : ws.items.find(item => item.sessionIds.includes(current)))
-    ?? ws.items[0]
-  if (target === undefined) return
-  const archived = new Set(ws.archivedSessionIds)
-  const blank = snap.ids.find(id => {
-    const row = snap.byId[id]
-    return row?.blank === true && target.sessionIds.includes(id) && !archived.has(id)
-  })
-  const id = blank ?? await sessions.create({ workspaceId: target.workspaceId })
-  sessions.open(id)
+  const current = currentSessionId(snap)
+  const index = current === undefined ? -1 : snap.ids.indexOf(current)
+  const target = snap.ids[index + delta]
+  if (target !== undefined && target !== current) ui.openSession(target)
 }
 
 /** Resolve one entry's display label for the shortcut settings list. */
@@ -91,7 +78,7 @@ function workspaceTitleBySession(workspaces: WorkspacesFace): Map<string, string
  * @returns the aggregate disposer.
  */
 export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): () => void {
-  const { sessions, workspaces, theme, t } = deps
+  const { sessions, workspaces, ui, theme, t } = deps
   // Recent conversations pinned above the empty-query list: newest first,
   // the current session, reusable blanks, and subagent sessions excluded
   // (subagents are addressed through their parent's catalog, not top-level
@@ -100,7 +87,7 @@ export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): ()
     const snap = sessions.list.getSnapshot()
     const workspaceTitles = workspaceTitleBySession(workspaces)
     return snap.ids
-      .filter(id => id !== snap.current)
+      .filter(id => id !== currentSessionId(snap))
       .map(id => ({ id, row: snap.byId[id] }))
       .filter((entry): entry is { id: string, row: NonNullable<typeof entry.row> } =>
         entry.row !== undefined
@@ -117,7 +104,7 @@ export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): ()
           // The project name also matches the query, so typing it finds its sessions.
           keywords: tag === undefined ? ['session', 'recent'] : ['session', 'recent', tag],
           ...(tag === undefined ? {} : { tag }),
-          execute: () => sessions.open(id),
+          execute: () => ui.openSession(id),
         }
       })
   })
@@ -127,21 +114,21 @@ export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): ()
       group: 'session',
       labelKey: 'entry.session.new',
       defaultHotkey: modHotkey('n', { alt: true }),
-      execute: () => startSession(sessions, workspaces),
+      execute: () => ui.startSession(),
     }),
     runtime.register({
       id: 'palette.session.prev',
       group: 'session',
       labelKey: 'entry.session.prev',
       defaultHotkey: modHotkey('ArrowUp', { alt: true }),
-      execute: () => stepSession(sessions, -1),
+      execute: () => stepSession(ui, sessions, -1),
     }),
     runtime.register({
       id: 'palette.session.next',
       group: 'session',
       labelKey: 'entry.session.next',
       defaultHotkey: modHotkey('ArrowDown', { alt: true }),
-      execute: () => stepSession(sessions, 1),
+      execute: () => stepSession(ui, sessions, 1),
     }),
     runtime.register({
       id: 'palette.session.switch',
@@ -154,14 +141,14 @@ export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): ()
         const snap = sessions.list.getSnapshot()
         const workspaceTitles = workspaceTitleBySession(workspaces)
         return snap.ids
-          .filter(id => id !== snap.current && snap.byId[id]?.origin !== 'subagent')
+          .filter(id => id !== currentSessionId(snap) && snap.byId[id]?.origin !== 'subagent')
           .map(id => {
             const tag = workspaceTitles.get(id)
             return {
               id,
               label: snap.byId[id]?.displayTitle ?? id,
               ...(tag === undefined ? {} : { tag }),
-              execute: () => sessions.open(id),
+              execute: () => ui.openSession(id),
             }
           })
       },
@@ -175,7 +162,7 @@ export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): ()
       defaultHotkey: modHotkey('o', { alt: true }),
       execute: () => {
         const snap = sessions.list.getSnapshot()
-        const current = snap.current
+        const current = currentSessionId(snap)
         if (current === undefined) return
         const cwd = snap.byId[current]?.cwd
         if (cwd === undefined) return
@@ -190,7 +177,8 @@ export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): ()
       defaultHotkey: modHotkey('a', { alt: true }),
       execute: () => {
         const snap = sessions.list.getSnapshot()
-        if (snap.current !== undefined) void workspaces.archiveSession(snap.current)
+        const current = currentSessionId(snap)
+        if (current !== undefined) void workspaces.archiveSession(current)
       },
     }),
     runtime.register({
@@ -202,7 +190,7 @@ export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): ()
       keepOpen: true,
       execute: () => {
         const snap = sessions.list.getSnapshot()
-        const current = snap.current
+        const current = currentSessionId(snap)
         if (current === undefined) return
         runtime.beginRename({
           sessionId: current,
@@ -224,7 +212,8 @@ export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): ()
       defaultHotkey: modHotkey('x', { alt: true }),
       execute: () => {
         const snap = sessions.list.getSnapshot()
-        if (snap.current !== undefined) void sessions.binding(snap.current)?.session.cancel()
+        const current = currentSessionId(snap)
+        if (current !== undefined) void sessions.binding(current)?.session.cancel()
       },
     }),
     runtime.register({

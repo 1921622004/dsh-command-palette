@@ -19,6 +19,11 @@ export interface SessionRow {
   readonly updatedAt?: number
   /** Coarse durable origin; 'subagent' rows are addressed via their parent's catalog. */
   readonly origin?: 'subagent'
+  /**
+   * Local reference-source counts; `mainView > 0` marks the session the main
+   * view shows — the replacement for the removed list-level `current` field.
+   */
+  readonly retainedBy?: Readonly<Partial<Record<'mainView', number>>>
 }
 
 /** One workspace row (`WorkspaceView` projection slice). */
@@ -35,11 +40,9 @@ export interface SessionsFace {
     getSnapshot(): {
       readonly ids: readonly string[]
       readonly byId: Readonly<Record<string, SessionRow | undefined>>
-      readonly current: string | undefined
     }
   }
   create(opts?: { readonly workspaceId?: string }): Promise<string>
-  open(id: string): void
   /** Resolve the current session's behavior verbs; undefined when unbound. */
   binding(id: string): {
     readonly session: {
@@ -59,6 +62,16 @@ export interface SessionsFace {
 export type RenameResult =
   | { readonly ok: true }
   | { readonly ok: false, readonly error: { readonly message: string } }
+
+/**
+ * The `uiWorkspace` service face (`ui-workspace`'s navigation controller).
+ * Session selection is view-owned upstream; this face is the public way to
+ * drive the main view, replacing the removed `sessions.open`.
+ */
+export interface WorkspaceUiFace {
+  openSession(id: string): void
+  startSession(workspaceId?: string): void
+}
 
 /** Built-in theme preferences (`ui-theme`'s closed set). */
 export type ThemePreference = 'light' | 'dark' | 'system'

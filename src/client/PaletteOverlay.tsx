@@ -11,15 +11,13 @@ import type { PaletteKey } from './locales.ts'
 import type { PaletteRuntime } from './service.ts'
 import type { RenameRequestPayload } from './service.ts'
 import { rankItems } from './fuzzy.ts'
+import { flattenRows, GROUP_ORDER } from './list-order.ts'
 import {
   eventToHotkey, formatHotkey, isGlobalHotkey, matchesHotkey, sameHotkey, type Hotkey,
 } from './hotkey.ts'
 import {
   effectiveEntryHotkey, effectiveHotkey, loadPrefs, pushRecent, savePrefs, setEntryHotkey,
 } from './prefs.ts'
-
-/** Group order for rendering. */
-const GROUP_ORDER: readonly PaletteEntry['group'][] = ['session', 'sidebar', 'settings', 'action', 'extension']
 
 const GROUP_KEY: Record<PaletteEntry['group'], PaletteKey> = {
   session: 'group.session',
@@ -417,12 +415,12 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
     }
   }
 
-  const grouped = new Map<PaletteEntry['group'], Row[]>()
-  for (const row of rows) {
-    const list = grouped.get(row.entry.group) ?? []
-    list.push(row)
-    grouped.set(row.entry.group, list)
-  }
+  // One display sequence: render order equals rows order, so the highlighted
+  // index and Enter always name the row the list shows. Sub-level choices keep
+  // their plain list (no group headers), as before.
+  const cells = sub !== null
+    ? rows.map((row, index) => ({ header: undefined as PaletteEntry['group'] | undefined, row, index }))
+    : flattenRows(rows, query, row => row.entry.group)
 
   return (
     <div className="dsh-palette-root" role="dialog" aria-label={t('overlay.aria')}>
@@ -449,69 +447,46 @@ export function PaletteOverlay({ palette, t }: PaletteOverlayProps): JSX.Element
             ? <div className="dsh-palette-empty">{t('rename.hint')}</div>
             : <>
               {rows.length === 0 && <div className="dsh-palette-empty">{t('status.empty')}</div>}
-              {sub !== null
-            ? rows.map((row, i) => (
-              <div
-                key={row.choice!.id}
-                className="dsh-palette-row"
-                data-active={i === active}
-                onMouseEnter={() => { if (hoverArmed.current) setActive(i) }}
-                onClick={() => run(row)}
-              >
-                <span className="dsh-palette-row-main">{row.choice!.label}</span>
-                {row.choice!.tag !== undefined && (
-                  <span
-                    className="dsh-palette-row-tag"
-                    title={row.choice!.tag}
-                  >{row.choice!.tag}</span>
-                )}
-                {row.choice!.detail !== undefined && (
-                  <span className="dsh-palette-row-detail">{row.choice!.detail}</span>
-                )}
-              </div>
-            ))
-            : (() => {
-              let index = 0
-              return GROUP_ORDER.flatMap(group => {
-                const list = grouped.get(group)
-                if (list === undefined) return []
+              {cells.map(cell => {
+                const { row, index } = cell
+                const binding = effectiveEntryHotkey(prefs, row.entry)
+                const main = row.choice === undefined
+                  ? labelOf(t, row.entry.labelKey, row.entry.label)
+                  : row.choice.label
+                const tag = row.choice === undefined ? row.entry.tag : row.choice.tag
+                const detail = row.choice === undefined
+                  ? labelOf(t, row.entry.detailKey, row.entry.detail)
+                  : row.choice.detail
                 return [
-                  <div key={`group-${group}`} className="dsh-palette-group">{t(GROUP_KEY[group])}</div>,
-                  ...list.map(row => {
-                    const i = index++
-                    const binding = effectiveEntryHotkey(prefs, row.entry)
-                    return (
-                      <div
-                        key={row.entry.id}
-                        className="dsh-palette-row"
-                        data-active={i === active}
-                        onMouseEnter={() => { if (hoverArmed.current) setActive(i) }}
-                        onClick={() => run(row)}
-                      >
-                        <span className="dsh-palette-row-main">
-                          {labelOf(t, row.entry.labelKey, row.entry.label)}
-                        </span>
-                        {row.entry.tag !== undefined && (
-                          <span
-                            className="dsh-palette-row-tag"
-                            title={row.entry.tag}
-                          >{row.entry.tag}</span>
-                        )}
-                        {labelOf(t, row.entry.detailKey, row.entry.detail) !== '' && (
-                          <span className="dsh-palette-row-detail">{labelOf(t, row.entry.detailKey, row.entry.detail)}</span>
-                        )}
-                        {binding !== null && (
-                          <span className="dsh-palette-row-shortcut">{formatHotkey(binding)}</span>
-                        )}
-                        {row.entry.choices !== undefined && (
-                          <span className="dsh-palette-row-hint">{t('row.hint.sub')}</span>
-                        )}
-                      </div>
-                    )
-                  }),
+                  ...(cell.header === undefined ? [] : [
+                    <div key={`group-${cell.header}`} className="dsh-palette-group">{t(GROUP_KEY[cell.header])}</div>,
+                  ]),
+                  <div
+                    key={row.choice === undefined ? row.entry.id : row.choice.id}
+                    className="dsh-palette-row"
+                    data-active={index === active}
+                    onMouseEnter={() => { if (hoverArmed.current) setActive(index) }}
+                    onClick={() => run(row)}
+                  >
+                    <span className="dsh-palette-row-main">{main}</span>
+                    {tag !== undefined && (
+                      <span
+                        className="dsh-palette-row-tag"
+                        title={tag}
+                      >{tag}</span>
+                    )}
+                    {detail !== undefined && detail !== '' && (
+                      <span className="dsh-palette-row-detail">{detail}</span>
+                    )}
+                    {row.choice === undefined && binding !== null && (
+                      <span className="dsh-palette-row-shortcut">{formatHotkey(binding)}</span>
+                    )}
+                    {row.choice === undefined && row.entry.choices !== undefined && (
+                      <span className="dsh-palette-row-hint">{t('row.hint.sub')}</span>
+                    )}
+                  </div>,
                 ]
-              })
-            })()}
+              })}
             </>
           }
         </div>

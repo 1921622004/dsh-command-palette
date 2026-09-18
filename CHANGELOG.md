@@ -2,6 +2,15 @@
 
 本项目所有显著变更记录于此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 
+## [未发布]
+
+### 修复
+
+- 搜索结果顺序与回车执行错位：搜索态渲染按固定分组重排，而键盘高亮与 `Enter` 按相关度分数取行，导致高亮在「归档当前对话」、回车却执行了别的条目。现在渲染、高亮、回车、`Tab` 补全与 hover 全部消费同一条显示序——搜索态保持分数序（组标题跟随首条所在组流动），空查询首页维持原分组浏览布局。
+- 适配 DeepSeek Harness 0.1.6-alpha.2 的会话导航重构（"navigation belongs to view owners"），此前归档、重命名、中断、新建会话、上一个/下一个会话、点击打开会话在该版本下全部静默失效：
+  - 当前会话不再读列表快照的 `current` 字段（已移除），改为按 `retainedBy.mainView` 引用计数解析，与官方 `ui-session` 选主绑定同规则；
+  - 打开会话改经 `uiWorkspace.openSession`（新增 `uiWorkspace` 注入依赖），「新建会话」直接委托上游 `uiWorkspace.startSession()`，删除自维护的空白会话复用镜像逻辑。
+
 ## [0.2.1] - 2026-09-15
 
 ### 新增

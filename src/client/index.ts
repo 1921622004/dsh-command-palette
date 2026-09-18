@@ -4,7 +4,7 @@
  * the built-in entries over the live `sessions`/`theme` services, and
  * registers the overlay view into `shell.overlay`.
  */
-import type { LocaleFace, SessionsFace, ThemeFace, WorkspacesFace } from './deps.ts'
+import type { LocaleFace, SessionsFace, ThemeFace, WorkspacesFace, WorkspaceUiFace } from './deps.ts'
 import { en, zh } from './locales.ts'
 import { registerBuiltins } from './builtin.ts'
 import { registerBetterSidebarEntries, type BetterSidebarFace } from './better-sidebar.ts'
@@ -33,6 +33,7 @@ interface ClientContext {
   }
   readonly sessions: SessionsFace
   readonly workspaces: WorkspacesFace
+  readonly uiWorkspace: WorkspaceUiFace
   readonly theme: ThemeFace
 }
 
@@ -40,7 +41,7 @@ interface ClientContext {
 export const name = 'ui-command-palette'
 
 /** Required services: copy, the shell overlay slot, and the live session/workspace/theme faces. */
-export const inject = ['locale', 'slots', 'sessions', 'workspaces', 'theme']
+export const inject = ['locale', 'slots', 'sessions', 'workspaces', 'theme', 'uiWorkspace']
 
 /**
  * Client plugin body.
@@ -55,7 +56,9 @@ export function apply(ctx: ClientContext): void {
   )
   const t = ctx.locale.bind('palette')
   ctx.effect(
-    () => registerBuiltins(runtime, { sessions: ctx.sessions, workspaces: ctx.workspaces, theme: ctx.theme, t }),
+    () => registerBuiltins(runtime, {
+      sessions: ctx.sessions, workspaces: ctx.workspaces, ui: ctx.uiWorkspace, theme: ctx.theme, t,
+    }),
     'ui-command-palette: built-in entries',
   )
   // The native right-Sidebar face is optional and read at action time; older
