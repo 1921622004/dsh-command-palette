@@ -6,7 +6,10 @@
  * values written before the rename are read from their original key.
  */
 import type { PaletteEntry, PalettePrefs } from './contract.ts'
-import { DEFAULT_HOTKEY, type Hotkey } from './hotkey.ts'
+import { DEFAULT_HOTKEY, isDesktopRuntime, type Hotkey } from './hotkey.ts'
+
+/** Desktop-safe palette-open default: ⌘K belongs to upstream `session.search` there. */
+const DESKTOP_OPEN_HOTKEY: Hotkey = { ...DEFAULT_HOTKEY, alt: true }
 
 const STORAGE_KEY = 'dsh-palette.prefs.v1'
 /** Key used before the package rename; read-only fallback so saved settings survive. */
@@ -84,9 +87,9 @@ export function savePrefs(prefs: PalettePrefs): void {
   }
 }
 
-/** The effective palette-open hotkey: the customized one or platform default. */
+/** The effective palette-open hotkey: the customized one or the runtime default. */
 export function effectiveHotkey(prefs: PalettePrefs): Hotkey {
-  return prefs.hotkey ?? DEFAULT_HOTKEY
+  return prefs.hotkey ?? (isDesktopRuntime() ? DESKTOP_OPEN_HOTKEY : DEFAULT_HOTKEY)
 }
 
 /** Effective direct shortcut: explicit override/disable, else entry default. */

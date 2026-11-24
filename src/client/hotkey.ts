@@ -31,6 +31,22 @@ export function modHotkey(
 /** The default palette hotkey: ⌘K on macOS, Ctrl+K elsewhere. */
 export const DEFAULT_HOTKEY: Hotkey = modHotkey('k')
 
+/**
+ * Whether the page runs inside the desktop shell. The desktop composition
+ * stamps `data-platform` on the document root; the plain web page does not.
+ * The desktop main process intercepts every registered shortcut chord before
+ * the page sees it, so defaults that clash with upstream registrations must
+ * differ per runtime.
+ */
+export function isDesktopRuntime(): boolean {
+  return typeof document !== 'undefined' && document.documentElement.dataset.platform !== undefined
+}
+
+/** Pick the palette default per runtime: desktop and plain web differ. */
+export function runtimeHotkey(web: Hotkey, desktop: Hotkey): Hotkey {
+  return isDesktopRuntime() ? desktop : web
+}
+
 /** True on Apple platforms (navigator-based; jsdom reports MacIntel by default). */
 function isMac(): boolean {
   return typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac')

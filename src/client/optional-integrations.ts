@@ -14,7 +14,7 @@
  *   as the presence probe (the DOM root unmounts while hidden).
  */
 import type { PaletteEntry } from './contract.ts'
-import { modHotkey } from './hotkey.ts'
+import { modHotkey, runtimeHotkey } from './hotkey.ts'
 import { sidebarLabelKey, toggleSidebar, type OfficialSidebarFace } from './sidebar-compat.ts'
 
 /** One sidebar entry button by its row attribute, when present. */
@@ -133,7 +133,9 @@ export function optionalIntegrationEntries(
       labelKey: boardActive() ? 'entry.board.close' : 'entry.board.open',
       detailKey: 'entry.board.detail',
       keywords: ['task', 'board', 'kanban'],
-      defaultHotkey: modHotkey('b', { alt: true }),
+      // Desktop: ⌘⌥B belongs to upstream `sidebar.right.toggle`; the web
+      // default stays.
+      defaultHotkey: runtimeHotkey(modHotkey('b', { alt: true }), modHotkey('b', { shift: true })),
       execute: () => board.click(),
     })
   }

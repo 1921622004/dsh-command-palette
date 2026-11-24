@@ -9,7 +9,7 @@ import type { PaletteRuntime } from './service.ts'
 import type {
   PaletteTranslate, SessionsFace, ThemeFace, ThemePreference, WorkspacesFace, WorkspaceUiFace,
 } from './deps.ts'
-import { formatHotkey, modHotkey } from './hotkey.ts'
+import { formatHotkey, modHotkey, runtimeHotkey } from './hotkey.ts'
 import { effectiveEntryHotkey, loadPrefs } from './prefs.ts'
 import { openSettingsSection } from './settings-opener.ts'
 
@@ -32,12 +32,22 @@ function currentSessionId(snap: ReturnType<SessionsFace['list']['getSnapshot']>)
   return snap.ids.find(id => (snap.byId[id]?.retainedBy?.mainView ?? 0) > 0)
 }
 
-/** Step to the neighboring session in host-list order; no-op at the ends. */
-function stepSession(ui: WorkspaceUiFace, sessions: SessionsFace, delta: -1 | 1): void {
+/**
+ * Step to the neighboring session in host-list order; no-op at the ends or
+ * when the current session cannot be resolved (retention counts move
+ * asynchronously mid-switch, and guessing a neighbor would jump).
+ * Reusable blank rows are skipped: they render the new-session page, not a
+ * conversation, and must never become a step target.
+ */
+/** Exported for regression tests. */
+export function stepSession(ui: WorkspaceUiFace, sessions: SessionsFace, delta: -1 | 1): void {
   const snap = sessions.list.getSnapshot()
   const current = currentSessionId(snap)
-  const index = current === undefined ? -1 : snap.ids.indexOf(current)
-  const target = snap.ids[index + delta]
+  if (current === undefined) return
+  const ids = snap.ids.filter(id => snap.byId[id]?.blank !== true)
+  const index = ids.indexOf(current)
+  if (index === -1) return
+  const target = ids[index + delta]
   if (target !== undefined && target !== current) ui.openSession(target)
 }
 
@@ -136,7 +146,9 @@ export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): ()
       labelKey: 'entry.session.switch',
       detailKey: 'entry.session.switch.detail',
       keywords: ['switch', 'goto'],
-      defaultHotkey: modHotkey('g', { alt: true }),
+      // Desktop: ⌘⌥G belongs to upstream `session.rename`; ⇧⌘G is free in
+      // both runtimes, so one chord serves both.
+      defaultHotkey: modHotkey('g', { shift: true }),
       choices: () => {
         const snap = sessions.list.getSnapshot()
         const workspaceTitles = workspaceTitleBySession(workspaces)
@@ -159,7 +171,9 @@ export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): ()
       labelKey: 'entry.session.openFolder',
       detailKey: 'entry.session.openFolder.detail',
       keywords: ['folder', 'finder', 'explorer', 'directory'],
-      defaultHotkey: modHotkey('o', { alt: true }),
+      // Desktop: ⌘⌥O belongs to upstream `workspace.openLocal`; the web
+      // default stays (the desktop chord ⇧⌘O is free there too).
+      defaultHotkey: runtimeHotkey(modHotkey('o', { alt: true }), modHotkey('o', { shift: true })),
       execute: () => {
         const snap = sessions.list.getSnapshot()
         const current = currentSessionId(snap)
@@ -258,7 +272,9 @@ export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): ()
       labelKey: 'entry.settings.hotkey',
       detailKey: 'entry.settings.hotkey.detail',
       keywords: ['hotkey', 'shortcut', 'keybinding'],
-      defaultHotkey: modHotkey('k', { alt: true }),
+      // Desktop: the plain-web ⌘⌥K opens the palette (see prefs.ts), so the
+      // recording entry shifts to ⇧⌘K there.
+      defaultHotkey: runtimeHotkey(modHotkey('k', { alt: true }), modHotkey('k', { shift: true })),
       keepOpen: true,
       execute: () => runtime.beginHotkeyRecording(),
     }),
@@ -268,7 +284,12 @@ export function registerBuiltins(runtime: PaletteRuntime, deps: BuiltinDeps): ()
       labelKey: 'entry.settings.bindings',
       detailKey: 'entry.settings.bindings.detail',
       keywords: ['hotkey', 'shortcut', 'keybinding'],
-      defaultHotkey: modHotkey('k', { alt: true, shift: true }),
+      // Desktop: ⌘⇧K records the palette-open hotkey there, so this list
+      // entry takes the remaining free chord.
+      defaultHotkey: runtimeHotkey(
+        modHotkey('k', { alt: true, shift: true }),
+        modHotkey('k', { alt: true, shift: true }),
+      ),
       choices: () => {
         const prefs = loadPrefs()
         const entries = new Map(
